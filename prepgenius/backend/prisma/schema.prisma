@@ -1,0 +1,82 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url = env("DATABASE_URL")
+}
+
+model User {
+  id        Int     @id @default(autoincrement())
+  email     String  @unique
+  password  String
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  resumes   Resume[]
+  interviews Interview[]
+
+  @@map("users")
+}
+
+model Resume {
+  id              Int     @id @default(autoincrement())
+  userId          Int
+  fileUrl         String
+  analysisResult  Json?   // Store AI analysis as JSON
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("resumes")
+}
+
+model Interview {
+  id          Int     @id @default(autoincrement())
+  userId      Int
+  role        String  // e.g., "Java Developer", "React Developer"
+  difficulty  String  // e.g., "beginner", "intermediate", "advanced"
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  user        User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questions   Question[]
+
+  @@map("interviews")
+}
+
+model Question {
+  id          Int     @id @default(autoincrement())
+  interviewId Int
+  questionText String
+  createdAt   DateTime @default(now())
+
+  // Relations
+  interview   Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+  answers     Answer[]
+
+  @@map("questions")
+}
+
+model Answer {
+  id          Int     @id @default(autoincrement())
+  questionId  Int
+  userAnswer  String
+  aiFeedback  String?
+  score       Int?    // 0-100
+  createdAt   DateTime @default(now())
+
+  // Relations
+  question    Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@map("answers")
+}
