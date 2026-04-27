@@ -40,7 +40,13 @@ export const authAPI = {
     axiosInstance.post('/auth/login', { email, password }),
   
   getProfile: () =>
-    axiosInstance.get('/auth/profile')
+    axiosInstance.get('/auth/profile'),
+
+  updateName: (name) =>
+    axiosInstance.put('/auth/profile/name', { name }),
+
+  updatePassword: (currentPassword, newPassword) =>
+    axiosInstance.put('/auth/profile/password', { currentPassword, newPassword })
 };
 
 // Dashboard APIs

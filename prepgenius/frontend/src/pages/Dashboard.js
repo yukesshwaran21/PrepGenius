@@ -70,6 +70,12 @@ const Dashboard = () => {
               <p className="text-xs text-gray-500">{user?.email}</p>
             </div>
             <button
+              onClick={() => navigate('/profile')}
+              className="bg-blue-100 text-blue-700 px-4 py-2 rounded-lg hover:bg-blue-200 transition font-medium"
+            >
+              Profile
+            </button>
+            <button
               onClick={handleLogout}
               className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition font-medium"
             >
@@ -231,10 +237,10 @@ const Dashboard = () => {
             )}
             {recentInterviews.length > 0 && (
               <button
-                onClick={() => navigate('/interview-history')}
+                onClick={() => navigate('/history')}
                 className="mt-4 w-full text-center text-blue-600 hover:text-blue-700 font-medium py-2 px-4 rounded-lg hover:bg-blue-50 transition"
               >
-                View All Interviews →
+                View Full History →
               </button>
             )}
           </div>
@@ -271,6 +277,14 @@ const Dashboard = () => {
               </div>
             ) : (
               <p className="text-gray-500 text-center py-8">No resumes yet. Upload your first resume!</p>
+            )}
+            {recentResumes.length > 0 && (
+              <button
+                onClick={() => navigate('/history')}
+                className="mt-4 w-full text-center text-indigo-600 hover:text-indigo-700 font-medium py-2 px-4 rounded-lg hover:bg-indigo-50 transition"
+              >
+                View Full History →
+              </button>
             )}
           </div>
         </div>

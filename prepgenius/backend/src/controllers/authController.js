@@ -115,4 +115,77 @@ const getProfile = async (req, res) => {
   }
 };
 
-module.exports = { register, login, getProfile };
+// UPDATE USER NAME
+const updateName = async (req, res) => {
+  try {
+    const { name } = req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: 'Name is required' });
+    }
+
+    const trimmedName = name.trim();
+    if (trimmedName.length < 2) {
+      return res.status(400).json({ error: 'Name must be at least 2 characters' });
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id: req.userId },
+      data: { name: trimmedName }
+    });
+
+    res.status(200).json({
+      message: 'Name updated successfully',
+      user: {
+        id: updatedUser.id,
+        email: updatedUser.email,
+        name: updatedUser.name
+      }
+    });
+  } catch (error) {
+    console.error('Update name error:', error);
+    res.status(500).json({ error: 'Failed to update name' });
+  }
+};
+
+// UPDATE USER PASSWORD
+const updatePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Current password and new password are required' });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'New password must be at least 6 characters' });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: req.userId }
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const isValidPassword = await comparePassword(currentPassword, user.password);
+    if (!isValidPassword) {
+      return res.status(400).json({ error: 'Current password is incorrect' });
+    }
+
+    const hashedPassword = await hashPassword(newPassword);
+
+    await prisma.user.update({
+      where: { id: req.userId },
+      data: { password: hashedPassword }
+    });
+
+    res.status(200).json({ message: 'Password updated successfully' });
+  } catch (error) {
+    console.error('Update password error:', error);
+    res.status(500).json({ error: 'Failed to update password' });
+  }
+};
+
+module.exports = { register, login, getProfile, updateName, updatePassword };

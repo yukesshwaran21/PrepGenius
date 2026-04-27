@@ -8,6 +8,8 @@ import InterviewSetup from './pages/InterviewSetup';
 import InterviewSession from './pages/InterviewSession';
 import InterviewResults from './pages/InterviewResults';
 import InterviewHistory from './pages/InterviewHistory';
+import History from './pages/History';
+import Profile from './pages/Profile';
 import PrivateRoute from './components/PrivateRoute';
 import './App.css';
 
@@ -70,6 +72,24 @@ function App() {
           element={
             <PrivateRoute>
               <InterviewHistory />
+            </PrivateRoute>
+          }
+        />
+
+        <Route
+          path="/history"
+          element={
+            <PrivateRoute>
+              <History />
+            </PrivateRoute>
+          }
+        />
+
+        <Route
+          path="/profile"
+          element={
+            <PrivateRoute>
+              <Profile />
             </PrivateRoute>
           }
         />
