@@ -19,14 +19,18 @@ const storage = multer.diskStorage({
   }
 });
 
-// Filter to accept only PDF and DOC files
+// Filter to accept only ATS-supported formats
 const fileFilter = (req, file, cb) => {
-  const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+  const allowedTypes = [
+    'application/pdf',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'text/plain'
+  ];
   
   if (allowedTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error('Only PDF and DOC files are allowed'), false);
+    cb(new Error('Only PDF, DOCX, and TXT files are allowed'), false);
   }
 };
 

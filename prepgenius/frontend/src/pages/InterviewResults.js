@@ -106,7 +106,7 @@ const InterviewResults = () => {
         </div>
 
         {/* Performance Breakdown */}
-        <div className="grid grid-cols-3 gap-4 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
           <div className="bg-white rounded-lg shadow p-6 text-center">
             <p className="text-3xl mb-2">📈</p>
             <p className="text-sm text-gray-600">Highest Score</p>
@@ -121,6 +121,16 @@ const InterviewResults = () => {
             <p className="text-3xl mb-2">📉</p>
             <p className="text-sm text-gray-600">Lowest Score</p>
             <p className="text-2xl font-bold text-orange-600">{summary.minScore}</p>
+          </div>
+          <div className="bg-white rounded-lg shadow p-6 text-center">
+            <p className="text-3xl mb-2">⏱️</p>
+            <p className="text-sm text-gray-600">Avg Time / Q</p>
+            <p className="text-2xl font-bold text-indigo-600">{summary.averageTimeSpentSeconds || 0}s</p>
+          </div>
+          <div className="bg-white rounded-lg shadow p-6 text-center">
+            <p className="text-3xl mb-2">⌛</p>
+            <p className="text-sm text-gray-600">Timed Out</p>
+            <p className="text-2xl font-bold text-red-600">{summary.timedOutCount || 0}</p>
           </div>
         </div>
 
@@ -146,7 +156,15 @@ const InterviewResults = () => {
                       <div>
                         <p className="font-semibold text-gray-900 text-left">Q{idx + 1}: {result.questionText}</p>
                         {result.answered && (
-                          <p className="text-sm text-gray-600 mt-1">Score: <span className="font-bold">{result.score}/100</span></p>
+                          <p className="text-sm text-gray-600 mt-1">
+                            Score: <span className="font-bold">{result.score}/100</span>
+                            {result.timeSpentSeconds !== null && result.timeSpentSeconds !== undefined && (
+                              <span className="ml-2">• Time: {result.timeSpentSeconds}s</span>
+                            )}
+                            {result.timedOut && (
+                              <span className="ml-2 text-red-600 font-medium">• Timed out</span>
+                            )}
+                          </p>
                         )}
                       </div>
                     </div>

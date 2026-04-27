@@ -1,166 +1,470 @@
-// Local Resume Analyzer - No API needed!
+const { ATS_TEMPLATES, getTemplateFitGuidance } = require('./resumeTemplates');
 
-const analyzeResumeLocal = (resumeText) => {
-  const text = resumeText.toLowerCase();
-  const lines = resumeText.split('\n').filter(line => line.trim().length > 0);
+const RUBRIC = {
+  keywordAlignment: 40,
+  structureParseability: 20,
+  formattingCompatibility: 20,
+  datesConsistency: 10,
+  readability: 10
+};
 
-  // Keywords for different categories
-  const technicalKeywords = {
-    programming: ['python', 'javascript', 'java', 'c++', 'react', 'nodejs', 'sql', 'html', 'css', 'typescript', '.net', 'php', 'ruby', 'golang', 'rust'],
-    tools: ['git', 'docker', 'kubernetes', 'aws', 'azure', 'gcp', 'jenkins', 'gitlab', 'github', 'jira', 'linux', 'windows'],
-    database: ['sql', 'mysql', 'postgresql', 'mongodb', 'redis', 'dynamodb', 'cassandra', 'firebase']
-  };
+const COMMON_ATS_KEYWORDS = [
+  'javascript',
+  'typescript',
+  'python',
+  'java',
+  'react',
+  'node',
+  'sql',
+  'aws',
+  'docker',
+  'kubernetes',
+  'rest',
+  'api',
+  'agile',
+  'leadership',
+  'communication'
+];
 
-  const actionVerbs = [
-    'developed', 'implemented', 'designed', 'created', 'built', 'engineered',
-    'led', 'managed', 'coordinated', 'improved', 'optimized', 'enhanced',
-    'increased', 'reduced', 'achieved', 'delivered', 'deployed', 'launched'
-  ];
+const SECTION_ORDER = ['summary', 'skills', 'experience', 'education', 'certifications'];
 
-  // Analysis functions
-  const hasContactInfo = () => {
-    return /email|phone|linkedin|github|website/.test(text);
-  };
+const SECTION_ALIASES = {
+  summary: ['summary', 'professional summary', 'profile', 'objective'],
+  skills: ['skills', 'technical skills', 'core competencies'],
+  experience: ['experience', 'work experience', 'employment history', 'professional experience'],
+  education: ['education', 'academic background'],
+  certifications: ['certifications', 'licenses', 'certificates']
+};
 
-  const hasMetrics = () => {
-    return /\d+%|\$\d+|increased|decreased|improved|reduced/.test(text);
-  };
+const ACTION_VERBS = [
+  'built',
+  'designed',
+  'implemented',
+  'improved',
+  'optimized',
+  'led',
+  'delivered',
+  'scaled',
+  'migrated',
+  'launched',
+  'reduced',
+  'increased'
+];
 
-  const hasActionVerbs = () => {
-    let count = 0;
-    actionVerbs.forEach(verb => {
-      const regex = new RegExp(`\\b${verb}\\b`, 'gi');
-      count += (text.match(regex) || []).length;
+const DATE_RANGE_REGEX = /((jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+\d{4}|\d{1,2}\/\d{4}|\d{4})\s*[-–to]{1,3}\s*((jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\s+\d{4}|\d{1,2}\/\d{4}|\d{4}|present|current)/gi;
+
+const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+
+const tokenize = (text) => {
+  const matches = text.toLowerCase().match(/[a-z0-9+#.]{2,}/g);
+  return matches || [];
+};
+
+const unique = (arr) => [...new Set(arr)];
+
+const normalizeLine = (line) => line.trim().replace(/\s+/g, ' ').toLowerCase();
+
+const detectSections = (lines) => {
+  const sections = [];
+
+  lines.forEach((line, index) => {
+    const normalized = normalizeLine(line);
+    Object.entries(SECTION_ALIASES).forEach(([canonical, aliases]) => {
+      if (aliases.some((alias) => normalized === alias || normalized.startsWith(`${alias}:`))) {
+        sections.push({ canonical, heading: line.trim(), index });
+      }
     });
-    return count;
-  };
+  });
 
-  const findTechnicalKeywords = () => {
-    const found = new Set();
-    Object.values(technicalKeywords).forEach(keywords => {
-      keywords.forEach(keyword => {
-        if (text.includes(keyword)) {
-          found.add(keyword);
-        }
-      });
-    });
-    return Array.from(found);
-  };
+  return sections;
+};
 
-  const getEducationSection = () => {
-    return /bachelor|master|phd|diploma|certification|graduate|university|college|school/.test(text);
-  };
+const scoreKeywordAlignment = (resumeTokens, jdTokens) => {
+  const keywordPool = jdTokens.length > 0 ? jdTokens : COMMON_ATS_KEYWORDS;
+  const matchedKeywords = keywordPool.filter((kw) => resumeTokens.includes(kw));
+  const ratio = keywordPool.length ? matchedKeywords.length / keywordPool.length : 0;
+  const score = Math.round(clamp(ratio * RUBRIC.keywordAlignment, 0, RUBRIC.keywordAlignment));
 
-  const hasExperienceSection = () => {
-    return /experience|employment|work history|professional|previous|current role/.test(text);
-  };
-
-  const hasSummary = () => {
-    const hasObjective = /objective|summary|professional summary|about/.test(text);
-    const firstFewLines = lines.slice(0, 5).join(' ').toLowerCase();
-    return hasObjective || (firstFewLines.length > 100 && firstFewLines.match(/i|my|expert|skilled/));
-  };
-
-  const wordCount = resumeText.split(/\s+/).length;
-  const hasGoodLength = wordCount >= 150 && wordCount <= 600;
-
-  const checkFormatting = () => {
-    const sections = lines.length;
-    const avgLineLength = resumeText.length / lines.length;
-    return sections > 5 && avgLineLength > 20;
-  };
-
-  // Calculate metrics
-  const actionVerbCount = hasActionVerbs();
-  const technicalKeywordsFound = findTechnicalKeywords();
-  const formatCheckPassed = checkFormatting();
-
-  // Build strengths
-  const strengths = [];
-  if (hasContactInfo()) strengths.push('Contact information is clearly visible and easy to find');
-  if (hasMetrics()) strengths.push('Resume includes quantifiable achievements and metrics');
-  if (actionVerbCount > 5) strengths.push('Good use of strong action verbs throughout the document');
-  if (technicalKeywordsFound.length > 3) strengths.push(`Includes relevant technical skills (${technicalKeywordsFound.slice(0, 3).join(', ')})`);
-  if (getEducationSection()) strengths.push('Education section is clearly documented');
-  if (hasExperienceSection()) strengths.push('Professional experience is well-organized');
-  if (hasSummary()) strengths.push('Has a professional summary or objective statement');
-  if (formatCheckPassed) strengths.push('Good formatting with clear section organization');
-
-  if (strengths.length === 0) {
-    strengths.push('Resume exists and is readable');
-  }
-
-  // Build weaknesses
-  const weaknesses = [];
-  if (!hasContactInfo()) weaknesses.push('Missing clear contact information (email, phone, LinkedIn)');
-  if (!hasMetrics()) weaknesses.push('Lacks quantifiable achievements and measurable results');
-  if (actionVerbCount < 3) weaknesses.push('Could use more strong action verbs to describe accomplishments');
-  if (technicalKeywordsFound.length === 0) weaknesses.push('Missing technical skills and tools keywords');
-  if (!getEducationSection()) weaknesses.push('Education section is unclear or missing');
-  if (!hasExperienceSection()) weaknesses.push('Work experience is not clearly structured');
-  if (!hasSummary()) weaknesses.push('Missing professional summary or objective statement');
-  if (!hasGoodLength) weaknesses.push(`Resume length (${wordCount} words) should be between 150-600 words`);
-  if (!formatCheckPassed) weaknesses.push('Formatting could be improved for better readability');
-
-  if (weaknesses.length === 0) {
-    weaknesses.push('Resume could include more details');
-  }
-
-  // Build suggestions
-  const suggestions = [];
-  if (!hasContactInfo()) suggestions.push('Add clear contact information at the top: email, phone, LinkedIn, GitHub');
-  if (!hasMetrics()) suggestions.push('Quantify your achievements - use percentages, numbers, dollar amounts');
-  if (actionVerbCount < 5) suggestions.push('Start bullet points with power words like: Developed, Implemented, Led, Managed');
-  if (technicalKeywordsFound.length < 5) suggestions.push('Include more technical skills and tools relevant to your target role');
-  if (!hasSummary()) suggestions.push('Add a professional summary (3-4 lines) highlighting key strengths');
-  suggestions.push('Use consistent formatting and date formats throughout');
-  suggestions.push('Keep most recent/relevant experience first');
-  if (wordCount < 150) suggestions.push('Expand resume with more details about your accomplishments');
-  if (wordCount > 600) suggestions.push('Condense resume - aim for 150-600 words for better readability');
-
-  // Calculate score
-  let score = 60; // Base score
-
-  // Add points for strengths
-  score += Math.min(strengths.length * 3, 15);
-
-  // Subtract points for weaknesses
-  score -= Math.min(weaknesses.length * 2, 20);
-
-  // Add bonus for technical skills
-  if (technicalKeywordsFound.length > 5) score += 5;
-  if (actionVerbCount > 10) score += 5;
-
-  // Add bonus for proper length
-  if (hasGoodLength) score += 3;
-
-  // Add bonus for formatting
-  if (formatCheckPassed) score += 3;
-
-  // Ensure score is between 0-100
-  score = Math.max(0, Math.min(100, score));
-
-  // Create summary
-  let summary = '';
-  if (score >= 80) {
-    summary = 'Your resume is well-structured with strong content. Focus on fine-tuning details and ensuring all key achievements are highlighted.';
-  } else if (score >= 70) {
-    summary = 'Your resume has a good foundation. Enhance it by adding more metrics, technical skills, and action verbs to make it stand out.';
-  } else if (score >= 60) {
-    summary = 'Your resume covers the basics but needs improvement. Add quantifiable results, better formatting, and stronger descriptions of your accomplishments.';
-  } else if (score >= 50) {
-    summary = 'Your resume needs significant work. Focus on adding contact info, structuring sections clearly, and using powerful action verbs.';
-  } else {
-    summary = 'Your resume needs major revisions. Start by ensuring it includes clear contact info, education, experience, and strong action verbs.';
-  }
+  const missingKeywords = keywordPool.filter((kw) => !resumeTokens.includes(kw)).slice(0, 12);
 
   return {
-    strengths: strengths.slice(0, 5),
-    weaknesses: weaknesses.slice(0, 5),
-    suggestions: suggestions.slice(0, 5),
-    overallScore: score,
-    summary: summary
+    score,
+    matchedKeywords: unique(matchedKeywords).slice(0, 20),
+    missingKeywords
   };
 };
 
-module.exports = { analyzeResumeLocal };
+const scoreStructure = (sections, lines) => {
+  let score = 0;
+  const issues = [];
+
+  const foundOrder = sections.map((s) => s.canonical);
+  const foundSet = new Set(foundOrder);
+
+  SECTION_ORDER.forEach((section) => {
+    if (foundSet.has(section)) {
+      score += 3;
+    }
+  });
+
+  // Parseability bonus for clear blocks
+  if (lines.length >= 20) {
+    score += 2;
+  }
+
+  // Ordering check
+  let outOfOrder = false;
+  for (let i = 1; i < sections.length; i += 1) {
+    const prevRank = SECTION_ORDER.indexOf(sections[i - 1].canonical);
+    const currRank = SECTION_ORDER.indexOf(sections[i].canonical);
+    if (prevRank > currRank) {
+      outOfOrder = true;
+      break;
+    }
+  }
+
+  if (!outOfOrder && sections.length > 1) {
+    score += 3;
+  } else if (outOfOrder) {
+    issues.push('Sections appear out of a standard ATS-friendly order.');
+  }
+
+  if (!foundSet.has('experience')) {
+    issues.push('Missing a clear Experience section heading.');
+  }
+  if (!foundSet.has('education')) {
+    issues.push('Missing a clear Education section heading.');
+  }
+
+  return {
+    score: clamp(score, 0, RUBRIC.structureParseability),
+    detectedSections: sections,
+    issues
+  };
+};
+
+const scoreFormatting = (rawText, lines) => {
+  let score = RUBRIC.formattingCompatibility;
+  const issues = [];
+
+  const hasEmail = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i.test(rawText);
+  const hasPhone = /(\+?\d{1,3}[\s-]?)?(\(?\d{3}\)?[\s-]?)?\d{3}[\s-]?\d{4}/.test(rawText);
+  const hasLinkedIn = /linkedin\.com|linkedin/i.test(rawText);
+
+  if (!hasEmail || !hasPhone) {
+    score -= 4;
+    issues.push('Contact info appears incomplete. Include both email and phone number.');
+  }
+  if (!hasLinkedIn) {
+    score -= 1;
+    issues.push('Add a LinkedIn profile URL for better ATS and recruiter context.');
+  }
+
+  const bulletLines = lines.filter((line) => /^\s*([\-*•])\s+/.test(line));
+  if (bulletLines.length < 4) {
+    score -= 3;
+    issues.push('Use concise bullet points for experience and achievements.');
+  }
+
+  const bulletTypes = new Set(
+    bulletLines
+      .map((line) => line.trim()[0])
+      .filter((char) => ['-', '*', '•'].includes(char))
+  );
+
+  if (bulletTypes.size > 1) {
+    score -= 2;
+    issues.push('Use a consistent bullet style throughout the resume.');
+  }
+
+  if (/\.(png|jpg|jpeg|gif|svg)|\bimage\b|\bicon\b|\bgraphic\b/i.test(rawText)) {
+    score -= 3;
+    issues.push('Avoid images/icons that ATS systems may not parse correctly.');
+  }
+
+  const repeatedLines = new Map();
+  lines.forEach((line) => {
+    const normalized = normalizeLine(line);
+    if (!normalized) {
+      return;
+    }
+    repeatedLines.set(normalized, (repeatedLines.get(normalized) || 0) + 1);
+  });
+
+  const suspiciousRepeats = [...repeatedLines.values()].some((count) => count >= 3);
+  if (suspiciousRepeats) {
+    score -= 2;
+    issues.push('Possible header/footer repetition detected; ATS may duplicate or skip content.');
+  }
+
+  // Heuristic: unusual unicode density may indicate incompatible fonts/icons in converted text
+  const nonAsciiCount = (rawText.match(/[^\x00-\x7F]/g) || []).length;
+  if (nonAsciiCount > rawText.length * 0.03) {
+    score -= 2;
+    issues.push('Detected many special symbols; use ATS-safe fonts and plain text symbols.');
+  }
+
+  return {
+    score: clamp(score, 0, RUBRIC.formattingCompatibility),
+    hasEmail,
+    hasPhone,
+    hasLinkedIn,
+    issues
+  };
+};
+
+const parseYear = (token) => {
+  const yearMatch = token.match(/(19|20)\d{2}/);
+  if (yearMatch) {
+    return parseInt(yearMatch[0], 10);
+  }
+  return null;
+};
+
+const scoreDateConsistency = (rawText) => {
+  let score = RUBRIC.datesConsistency;
+  const issues = [];
+  const ranges = [];
+
+  let match = DATE_RANGE_REGEX.exec(rawText);
+  while (match) {
+    const startToken = match[1] || '';
+    const endToken = match[3] || '';
+    const startYear = parseYear(startToken);
+    const endYear = /present|current/i.test(endToken) ? new Date().getFullYear() : parseYear(endToken);
+
+    if (startYear && endYear) {
+      ranges.push({ startYear, endYear, raw: match[0] });
+      if (startYear > endYear) {
+        score -= 3;
+        issues.push(`Date range appears reversed: ${match[0]}`);
+      }
+    }
+
+    match = DATE_RANGE_REGEX.exec(rawText);
+  }
+
+  if (ranges.length === 0) {
+    score -= 4;
+    issues.push('No clear date ranges found for experience/education entries.');
+  }
+
+  const inconsistentDateFormats = (() => {
+    const hasMonthWord = /(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i.test(rawText);
+    const hasSlashDates = /\d{1,2}\/\d{4}/.test(rawText);
+    return hasMonthWord && hasSlashDates;
+  })();
+
+  if (inconsistentDateFormats) {
+    score -= 2;
+    issues.push('Mixed date formats found. Use one consistent style (e.g., MMM YYYY).');
+  }
+
+  return {
+    score: clamp(score, 0, RUBRIC.datesConsistency),
+    ranges,
+    issues
+  };
+};
+
+const scoreReadability = (rawText, lines) => {
+  const words = rawText.split(/\s+/).filter(Boolean);
+  const wordCount = words.length;
+  const avgWordsPerLine = lines.length ? wordCount / lines.length : wordCount;
+  const actionVerbCount = ACTION_VERBS.reduce((sum, verb) => {
+    const regex = new RegExp(`\\b${verb}\\b`, 'gi');
+    return sum + (rawText.match(regex) || []).length;
+  }, 0);
+
+  let score = RUBRIC.readability;
+  const issues = [];
+
+  if (wordCount < 200) {
+    score -= 2;
+    issues.push('Resume is very short; add impact bullets and context.');
+  }
+  if (wordCount > 900) {
+    score -= 3;
+    issues.push('Resume is likely too long for ATS/recruiter scanning; target 1-2 pages.');
+  }
+  if (avgWordsPerLine > 18) {
+    score -= 2;
+    issues.push('Long dense lines reduce scannability. Use shorter bullet points.');
+  }
+  if (actionVerbCount < 5) {
+    score -= 2;
+    issues.push('Use more action verbs to improve impact and readability.');
+  }
+
+  return {
+    score: clamp(score, 0, RUBRIC.readability),
+    wordCount,
+    actionVerbCount,
+    issues
+  };
+};
+
+const inferRole = (tokens) => {
+  if (tokens.includes('data') || tokens.includes('analytics') || tokens.includes('sql')) {
+    return 'Data / Analytics';
+  }
+  if (tokens.includes('react') || tokens.includes('frontend')) {
+    return 'Frontend';
+  }
+  if (tokens.includes('node') || tokens.includes('backend') || tokens.includes('api')) {
+    return 'Backend';
+  }
+  return 'General';
+};
+
+const scoreEducationExperienceAlignment = (rawText) => {
+  const issues = [];
+  const hasEducation = /\beducation\b|university|college|bachelor|master|phd/i.test(rawText);
+  const hasExperience = /\bexperience\b|employment|worked|engineer|developer|manager/i.test(rawText);
+
+  if (!hasEducation || !hasExperience) {
+    issues.push('Education and experience sections should both be explicit for ATS ranking.');
+  }
+
+  return {
+    aligned: hasEducation && hasExperience,
+    issues
+  };
+};
+
+const buildRemediationChecklist = (missingKeywords, issues) => {
+  const checklist = [
+    'Use standard section headings: Summary, Skills, Experience, Education, Certifications.',
+    'Ensure contact block includes full name, email, phone, and LinkedIn URL.',
+    'Use single-column layout and plain bullet points with consistent style.',
+    'Keep date format consistent across all sections (recommended: MMM YYYY).'
+  ];
+
+  if (missingKeywords.length > 0) {
+    checklist.push(`Add 5-8 relevant JD keywords naturally: ${missingKeywords.slice(0, 8).join(', ')}.`);
+  }
+
+  if (issues.some((issue) => issue.toLowerCase().includes('image'))) {
+    checklist.push('Remove icons, graphics, logos, and text boxes for ATS compatibility.');
+  }
+
+  return checklist;
+};
+
+const analyzeResumeLocal = (resumeText, options = {}) => {
+  const rawText = resumeText || '';
+  const lines = rawText.split(/\r?\n/).filter((line) => line.trim().length > 0);
+  const resumeTokens = unique(tokenize(rawText));
+  const jdHints = options.jdHints || '';
+  const jdTokens = unique(tokenize(jdHints)).filter((token) => token.length >= 3);
+
+  const sections = detectSections(lines);
+  const keyword = scoreKeywordAlignment(resumeTokens, jdTokens);
+  const structure = scoreStructure(sections, lines);
+  const formatting = scoreFormatting(rawText, lines);
+  const dates = scoreDateConsistency(rawText);
+  const readability = scoreReadability(rawText, lines);
+  const eduExpAlignment = scoreEducationExperienceAlignment(rawText);
+
+  const overallScore = clamp(
+    keyword.score + structure.score + formatting.score + dates.score + readability.score,
+    0,
+    100
+  );
+
+  const flaggedIssues = [
+    ...structure.issues,
+    ...formatting.issues,
+    ...dates.issues,
+    ...readability.issues,
+    ...eduExpAlignment.issues
+  ];
+
+  const strengths = [
+    keyword.matchedKeywords.length > 0
+      ? `Matched ${keyword.matchedKeywords.length} relevant keywords.`
+      : 'Resume text is extractable and scannable.',
+    structure.detectedSections.length >= 3
+      ? `Detected clear sections: ${structure.detectedSections
+          .map((s) => s.canonical)
+          .filter((value, index, arr) => arr.indexOf(value) === index)
+          .join(', ')}.`
+      : 'Basic section structure detected.',
+    formatting.hasEmail && formatting.hasPhone
+      ? 'Contact information includes email and phone.'
+      : 'Contact block exists and can be improved.',
+    readability.actionVerbCount >= 5
+      ? `Good action-verb usage (${readability.actionVerbCount} detected).`
+      : 'Readable baseline resume language.'
+  ];
+
+  const weaknesses = flaggedIssues.slice(0, 8);
+  const remediationChecklist = buildRemediationChecklist(keyword.missingKeywords, flaggedIssues);
+
+  const inferredRole = inferRole(resumeTokens);
+  const templateFitGuidance = getTemplateFitGuidance(inferredRole);
+
+  const summary =
+    overallScore >= 85
+      ? 'Excellent ATS compatibility with minor improvements needed.'
+      : overallScore >= 70
+      ? 'Good ATS baseline. Address flagged issues to increase interview conversion.'
+      : overallScore >= 55
+      ? 'Moderate ATS compatibility. Prioritize structure and keyword alignment fixes.'
+      : 'Low ATS compatibility. Rebuild with an ATS-optimized template and targeted keywords.';
+
+  return {
+    workflowVersion: 'ats-v1.0',
+    overallScore,
+    rubric: RUBRIC,
+    sectionBreakdown: {
+      keywordAlignment: {
+        max: RUBRIC.keywordAlignment,
+        score: keyword.score,
+        matchedKeywords: keyword.matchedKeywords,
+        missingKeywords: keyword.missingKeywords
+      },
+      structureParseability: {
+        max: RUBRIC.structureParseability,
+        score: structure.score,
+        detectedSections: structure.detectedSections
+      },
+      formattingCompatibility: {
+        max: RUBRIC.formattingCompatibility,
+        score: formatting.score,
+        checks: {
+          hasEmail: formatting.hasEmail,
+          hasPhone: formatting.hasPhone,
+          hasLinkedIn: formatting.hasLinkedIn
+        }
+      },
+      datesConsistency: {
+        max: RUBRIC.datesConsistency,
+        score: dates.score,
+        rangesDetected: dates.ranges.length
+      },
+      readability: {
+        max: RUBRIC.readability,
+        score: readability.score,
+        wordCount: readability.wordCount,
+        actionVerbCount: readability.actionVerbCount
+      }
+    },
+    flaggedIssues: unique(flaggedIssues).slice(0, 20),
+    remediationSteps: remediationChecklist,
+    recommendations: {
+      targetedKeywordSuggestions: keyword.missingKeywords.slice(0, 12),
+      templateFitGuidance,
+      todoChecklist: remediationChecklist
+    },
+    templates: ATS_TEMPLATES,
+
+    // Backward-compatible keys used by existing UI
+    strengths: strengths.slice(0, 6),
+    weaknesses,
+    suggestions: remediationChecklist.slice(0, 8),
+    summary
+  };
+};
+
+module.exports = { analyzeResumeLocal, RUBRIC };

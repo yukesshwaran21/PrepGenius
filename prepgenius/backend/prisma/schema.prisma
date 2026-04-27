@@ -44,6 +44,7 @@ model Interview {
   userId      Int
   role        String  // e.g., "Java Developer", "React Developer"
   difficulty  String  // e.g., "beginner", "intermediate", "advanced"
+  questionTimeLimitSec Int @default(60)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -73,6 +74,11 @@ model Answer {
   userAnswer  String
   aiFeedback  String?
   score       Int?    // 0-100
+  answerStartedAt DateTime?
+  answerSubmittedAt DateTime?
+  timeSpentSeconds Int?
+  timedOut    Boolean @default(false)
+  autoSubmitted Boolean @default(false)
   createdAt   DateTime @default(now())
 
   // Relations

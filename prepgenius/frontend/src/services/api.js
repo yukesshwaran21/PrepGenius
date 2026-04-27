@@ -63,15 +63,24 @@ export const dashboardAPI = {
 
 // Resume APIs
 export const resumeAPI = {
-  uploadResume: (file) => {
+  uploadResume: (file, jdHints = '') => {
     const formData = new FormData();
     formData.append('file', file);
+    if (jdHints) {
+      formData.append('jdHints', jdHints);
+    }
     return axiosInstance.post('/resume/upload', formData, {
       headers: {
         'Content-Type': 'multipart/form-data'
       }
     });
   },
+
+  analyzeText: (resumeText, jdHints = '') =>
+    axiosInstance.post('/resume/analyze-text', { resumeText, jdHints }),
+
+  getTemplates: () =>
+    axiosInstance.get('/resume/templates'),
   
   getAllResumes: () =>
     axiosInstance.get('/resume'),
@@ -91,8 +100,12 @@ export const interviewAPI = {
   getInterviewQuestions: (interviewId) =>
     axiosInstance.get(`/interview/${interviewId}`).then(res => res.data),
   
-  submitAnswer: (questionId, userAnswer) =>
-    axiosInstance.post('/interview/answer', { questionId, userAnswer }).then(res => res.data),
+  submitAnswer: (questionId, userAnswer, meta = {}) =>
+    axiosInstance.post('/interview/answer', {
+      questionId,
+      userAnswer,
+      ...meta
+    }).then(res => res.data),
   
   getInterviewResults: (interviewId) =>
     axiosInstance.get(`/interview/${interviewId}/results`).then(res => res.data),

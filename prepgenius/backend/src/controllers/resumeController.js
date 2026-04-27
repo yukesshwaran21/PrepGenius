@@ -1,8 +1,9 @@
 const { PrismaClient } = require('@prisma/client');
 const fs = require('fs');
 const path = require('path');
-const { extractTextFromPDF } = require('../utils/openai');
+const { extractTextFromResumeFile } = require('../utils/openai');
 const { analyzeResumeLocal } = require('../utils/localAnalyzer');
+const { ATS_TEMPLATES } = require('../utils/resumeTemplates');
 
 const prisma = new PrismaClient();
 
@@ -10,6 +11,7 @@ const prisma = new PrismaClient();
 const uploadResume = async (req, res) => {
   try {
     const userId = req.userId;
+    const jdHints = req.body?.jdHints || '';
     
     // Check if file was uploaded
     if (!req.file) {
@@ -18,8 +20,8 @@ const uploadResume = async (req, res) => {
 
     console.log('📄 Processing resume file:', req.file.filename);
 
-    // Extract text from PDF
-    const resumeText = await extractTextFromPDF(req.file.path);
+    // Extract text from supported formats (pdf/docx/txt)
+    const resumeText = await extractTextFromResumeFile(req.file.path);
     
     if (!resumeText || resumeText.trim().length === 0) {
       // Delete the uploaded file
@@ -31,7 +33,7 @@ const uploadResume = async (req, res) => {
     console.log('🤖 Analyzing resume locally...');
 
     // Analyze resume with local analyzer (NO API needed!)
-    const analysis = analyzeResumeLocal(resumeText);
+    const analysis = analyzeResumeLocal(resumeText, { jdHints });
 
     console.log('✅ Analysis complete:', analysis.overallScore);
 
@@ -66,6 +68,37 @@ const uploadResume = async (req, res) => {
     console.error('❌ Upload resume error:', error.message);
     console.error('Full error:', error);
     res.status(500).json({ error: error.message || 'Failed to upload and analyze resume' });
+  }
+};
+
+// ANALYZE PASTED/PARSED RESUME TEXT
+const analyzeResumeText = async (req, res) => {
+  try {
+    const { resumeText, jdHints } = req.body;
+
+    if (!resumeText || typeof resumeText !== 'string' || resumeText.trim().length < 50) {
+      return res.status(400).json({ error: 'resumeText is required and should be at least 50 characters' });
+    }
+
+    const analysis = analyzeResumeLocal(resumeText, { jdHints: jdHints || '' });
+
+    res.status(200).json({
+      message: 'Resume text analyzed successfully',
+      analysis
+    });
+  } catch (error) {
+    console.error('Analyze resume text error:', error);
+    res.status(500).json({ error: 'Failed to analyze resume text' });
+  }
+};
+
+// GET ATS TEMPLATES
+const getAtsTemplates = async (req, res) => {
+  try {
+    res.status(200).json({ templates: ATS_TEMPLATES });
+  } catch (error) {
+    console.error('Get ATS templates error:', error);
+    res.status(500).json({ error: 'Failed to fetch ATS templates' });
   }
 };
 
@@ -168,4 +201,11 @@ const deleteResume = async (req, res) => {
   }
 };
 
-module.exports = { uploadResume, getResumeAnalysis, getAllResumes, deleteResume };
+module.exports = {
+  uploadResume,
+  analyzeResumeText,
+  getAtsTemplates,
+  getResumeAnalysis,
+  getAllResumes,
+  deleteResume
+};

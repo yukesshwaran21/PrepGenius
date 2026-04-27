@@ -3,6 +3,12 @@ const { getQuestions, generateFeedback } = require('../utils/questionGenerator')
 
 const prisma = new PrismaClient();
 
+const getQuestionTimeLimitByDifficulty = (difficulty) => {
+  if (difficulty === 'beginner') return 75;
+  if (difficulty === 'advanced') return 45;
+  return 60;
+};
+
 // Start a new interview session
 const startInterview = async (req, res) => {
   try {
@@ -22,12 +28,15 @@ const startInterview = async (req, res) => {
 
     console.log(`🎤 Starting interview for user ${userId}: ${role} (${difficulty})`);
 
+    const questionTimeLimitSec = getQuestionTimeLimitByDifficulty(difficulty);
+
     // Create interview session
     const interview = await prisma.interview.create({
       data: {
         userId,
         role,
-        difficulty
+        difficulty,
+        questionTimeLimitSec
       },
       include: {
         questions: true
@@ -54,6 +63,7 @@ const startInterview = async (req, res) => {
       interviewId: interview.id,
       role,
       difficulty,
+      questionTimeLimitSec,
       totalQuestions: questionsWithData.length,
       questions: questionsWithData
     });
@@ -93,13 +103,16 @@ const getInterviewQuestions = async (req, res) => {
       interviewId: interview.id,
       role: interview.role,
       difficulty: interview.difficulty,
+      questionTimeLimitSec: interview.questionTimeLimitSec,
       questions: interview.questions.map(q => ({
         id: q.id,
         questionText: q.questionText,
         answered: q.answers.length > 0,
         answer: q.answers[0]?.userAnswer || null,
         feedback: q.answers[0]?.aiFeedback || null,
-        score: q.answers[0]?.score || null
+        score: q.answers[0]?.score || null,
+        timedOut: q.answers[0]?.timedOut || false,
+        timeSpentSeconds: q.answers[0]?.timeSpentSeconds || null
       }))
     });
   } catch (error) {
@@ -111,10 +124,23 @@ const getInterviewQuestions = async (req, res) => {
 // Submit answer to a question
 const submitAnswer = async (req, res) => {
   try {
-    const { questionId, userAnswer } = req.body;
+    const {
+      questionId,
+      userAnswer,
+      answerStartedAt,
+      answerSubmittedAt,
+      timeSpentSeconds,
+      timedOut,
+      autoSubmitted
+    } = req.body;
     const userId = req.userId;
 
-    if (!userAnswer || userAnswer.trim().length === 0) {
+    const normalizedAnswer = (userAnswer || '').trim();
+    const isTimedOut = Boolean(timedOut);
+    const isAutoSubmitted = Boolean(autoSubmitted);
+    const parsedTimeSpent = Number(timeSpentSeconds);
+
+    if (!normalizedAnswer && !isTimedOut) {
       return res.status(400).json({ error: 'Answer cannot be empty' });
     }
 
@@ -137,7 +163,9 @@ const submitAnswer = async (req, res) => {
     }
 
     // Generate feedback and score
-    const { score, feedback } = generateFeedback(question.questionText, userAnswer);
+    const answerToEvaluate = normalizedAnswer || 'No response submitted before timeout.';
+
+    const { score, feedback } = generateFeedback(question.questionText, answerToEvaluate);
 
     console.log(`📝 Answer submitted for question ${questionId}, score: ${score}`);
 
@@ -152,16 +180,24 @@ const submitAnswer = async (req, res) => {
     const answer = await prisma.answer.create({
       data: {
         questionId: parseInt(questionId),
-        userAnswer,
+        userAnswer: answerToEvaluate,
         aiFeedback: feedback,
-        score
+        score,
+        answerStartedAt: answerStartedAt ? new Date(answerStartedAt) : null,
+        answerSubmittedAt: answerSubmittedAt ? new Date(answerSubmittedAt) : new Date(),
+        timeSpentSeconds: Number.isFinite(parsedTimeSpent) ? Math.max(0, Math.round(parsedTimeSpent)) : null,
+        timedOut: isTimedOut,
+        autoSubmitted: isAutoSubmitted
       }
     });
 
     res.status(201).json({
       answerId: answer.id,
       score,
-      feedback
+      feedback,
+      timedOut: answer.timedOut,
+      autoSubmitted: answer.autoSubmitted,
+      timeSpentSeconds: answer.timeSpentSeconds
     });
   } catch (error) {
     console.error('Error submitting answer:', error);
@@ -205,6 +241,13 @@ const getInterviewResults = async (req, res) => {
     const averageScore = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
     const maxScore = scores.length > 0 ? Math.max(...scores) : 0;
     const minScore = scores.length > 0 ? Math.min(...scores) : 0;
+    const timedOutCount = interview.questions.filter(q => q.answers[0]?.timedOut).length;
+    const answerTimes = interview.questions
+      .filter(q => q.answers[0]?.timeSpentSeconds !== null && q.answers[0]?.timeSpentSeconds !== undefined)
+      .map(q => q.answers[0].timeSpentSeconds);
+    const averageTimeSpentSeconds = answerTimes.length > 0
+      ? Math.round(answerTimes.reduce((a, b) => a + b, 0) / answerTimes.length)
+      : 0;
 
     // Performance tier
     let performanceTier = 'Needs Improvement';
@@ -219,6 +262,7 @@ const getInterviewResults = async (req, res) => {
       interviewId: interview.id,
       role: interview.role,
       difficulty: interview.difficulty,
+      questionTimeLimitSec: interview.questionTimeLimitSec,
       createdAt: interview.createdAt,
       summary: {
         totalQuestions,
@@ -226,6 +270,8 @@ const getInterviewResults = async (req, res) => {
         averageScore,
         maxScore,
         minScore,
+        timedOutCount,
+        averageTimeSpentSeconds,
         performanceTier
       },
       detailedResults: interview.questions.map(q => ({
@@ -234,7 +280,10 @@ const getInterviewResults = async (req, res) => {
         userAnswer: q.answers[0]?.userAnswer || null,
         feedback: q.answers[0]?.aiFeedback || null,
         score: q.answers[0]?.score || null,
-        answered: q.answers.length > 0
+        answered: q.answers.length > 0,
+        timedOut: q.answers[0]?.timedOut || false,
+        autoSubmitted: q.answers[0]?.autoSubmitted || false,
+        timeSpentSeconds: q.answers[0]?.timeSpentSeconds || null
       }))
     });
   } catch (error) {
@@ -274,9 +323,11 @@ const getUserInterviews = async (req, res) => {
         role: interview.role,
         difficulty: interview.difficulty,
         createdAt: interview.createdAt,
+        questionTimeLimitSec: interview.questionTimeLimitSec,
         totalQuestions: interview.questions.length,
         answeredQuestions: interview.questions.filter(q => q.answers.length > 0).length,
-        averageScore
+        averageScore,
+        timedOutCount: interview.questions.filter(q => q.answers[0]?.timedOut).length
       };
     });
 
