@@ -7,6 +7,7 @@ import ResumeUpload from './pages/ResumeUpload';
 import InterviewSetup from './pages/InterviewSetup';
 import InterviewSession from './pages/InterviewSession';
 import InterviewResults from './pages/InterviewResults';
+import InterviewHistory from './pages/InterviewHistory';
 import PrivateRoute from './components/PrivateRoute';
 import './App.css';
 
@@ -60,6 +61,15 @@ function App() {
           element={
             <PrivateRoute>
               <InterviewResults />
+            </PrivateRoute>
+          }
+        />
+
+        <Route
+          path="/interview-history"
+          element={
+            <PrivateRoute>
+              <InterviewHistory />
             </PrivateRoute>
           }
         />

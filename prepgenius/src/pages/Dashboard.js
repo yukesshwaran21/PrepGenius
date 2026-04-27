@@ -229,6 +229,14 @@ const Dashboard = () => {
             ) : (
               <p className="text-gray-500 text-center py-8">No interviews yet. Start your first one!</p>
             )}
+            {recentInterviews.length > 0 && (
+              <button
+                onClick={() => navigate('/interview-history')}
+                className="mt-4 w-full text-center text-blue-600 hover:text-blue-700 font-medium py-2 px-4 rounded-lg hover:bg-blue-50 transition"
+              >
+                View All Interviews →
+              </button>
+            )}
           </div>
 
           {/* Recent Resumes */}
