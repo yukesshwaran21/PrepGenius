@@ -37,7 +37,7 @@ const InterviewSession = () => {
   const totalQuestions = questions.length;
   const safeQuestionIndex = Math.min(currentQuestionIndex, Math.max(totalQuestions - 1, 0));
   const currentQuestion = questions[safeQuestionIndex] || null;
-  const progress = ((currentQuestionIndex + 1) / totalQuestions) * 100;
+  const progress = ((currentQuestionIndex + 1) / Math.max(totalQuestions, 1)) * 100;
   const questionTimeLimitSec = interview?.questionTimeLimitSec || 60;
 
   const hasSubmittedCurrent = currentQuestion ? Boolean(submittedAnswers[currentQuestion.id]) : false;
@@ -48,10 +48,8 @@ const InterviewSession = () => {
       return;
     }
 
-    const nextQuestion = questions[safeQuestionIndex];
-    const nextQuestionId = nextQuestion.id;
-    setCurrentAnswer(submittedAnswers[nextQuestionId]?.userAnswer || '');
-    setShowFeedback(Boolean(feedbackByQuestion[nextQuestionId]));
+    setCurrentAnswer('');
+    setShowFeedback(false);
     setTimeLeft(questionTimeLimitSec);
     setQuestionStartAt(new Date());
 
@@ -62,11 +60,7 @@ const InterviewSession = () => {
     hasInterview,
     currentQuestion,
     currentQuestionIndex,
-    feedbackByQuestion,
-    questions,
-    safeQuestionIndex,
-    questionTimeLimitSec,
-    submittedAnswers
+    questionTimeLimitSec
   ]);
 
   const getTimeSpentSeconds = () => {
