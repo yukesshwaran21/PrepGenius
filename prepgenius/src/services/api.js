@@ -77,4 +77,22 @@ export const resumeAPI = {
     axiosInstance.delete(`/resume/${resumeId}`)
 };
 
+// Interview APIs
+export const interviewAPI = {
+  startInterview: (role, difficulty) =>
+    axiosInstance.post('/interview/start', { role, difficulty }).then(res => res.data),
+  
+  getInterviewQuestions: (interviewId) =>
+    axiosInstance.get(`/interview/${interviewId}`).then(res => res.data),
+  
+  submitAnswer: (questionId, userAnswer) =>
+    axiosInstance.post('/interview/answer', { questionId, userAnswer }).then(res => res.data),
+  
+  getInterviewResults: (interviewId) =>
+    axiosInstance.get(`/interview/${interviewId}/results`).then(res => res.data),
+  
+  getUserInterviews: (limit = 10) =>
+    axiosInstance.get('/interview', { params: { limit } }).then(res => res.data)
+};
+
 export default axiosInstance;

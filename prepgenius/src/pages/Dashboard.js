@@ -182,7 +182,10 @@ const Dashboard = () => {
                 </div>
                 <span className="text-4xl">🎙️</span>
               </div>
-              <button className="mt-4 bg-white text-purple-600 px-6 py-2 rounded-lg font-semibold hover:bg-purple-50 transition">
+              <button
+                onClick={() => navigate('/interview-setup')}
+                className="mt-4 bg-white text-purple-600 px-6 py-2 rounded-lg font-semibold hover:bg-purple-50 transition"
+              >
                 Start Interview
               </button>
             </div>
