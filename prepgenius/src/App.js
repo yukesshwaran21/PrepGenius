@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Dashboard from './pages/Dashboard';
+import ResumeUpload from './pages/ResumeUpload';
 import PrivateRoute from './components/PrivateRoute';
 import './App.css';
 
@@ -20,6 +21,15 @@ function App() {
           element={
             <PrivateRoute>
               <Dashboard />
+            </PrivateRoute>
+          }
+        />
+
+        <Route
+          path="/resume-analyzer"
+          element={
+            <PrivateRoute>
+              <ResumeUpload />
             </PrivateRoute>
           }
         />

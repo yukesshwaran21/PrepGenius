@@ -163,7 +163,10 @@ const Dashboard = () => {
                 </div>
                 <span className="text-4xl">📤</span>
               </div>
-              <button className="mt-4 bg-white text-blue-600 px-6 py-2 rounded-lg font-semibold hover:bg-blue-50 transition">
+              <button
+                onClick={() => navigate('/resume-analyzer')}
+                className="mt-4 bg-white text-blue-600 px-6 py-2 rounded-lg font-semibold hover:bg-blue-50 transition"
+              >
                 Upload Now
               </button>
             </div>

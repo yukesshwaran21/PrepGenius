@@ -55,4 +55,26 @@ export const dashboardAPI = {
     axiosInstance.get('/dashboard/resumes', { params: { limit } })
 };
 
+// Resume APIs
+export const resumeAPI = {
+  uploadResume: (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return axiosInstance.post('/resume/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+  },
+  
+  getAllResumes: () =>
+    axiosInstance.get('/resume'),
+  
+  getResumeAnalysis: (resumeId) =>
+    axiosInstance.get(`/resume/${resumeId}`),
+  
+  deleteResume: (resumeId) =>
+    axiosInstance.delete(`/resume/${resumeId}`)
+};
+
 export default axiosInstance;
