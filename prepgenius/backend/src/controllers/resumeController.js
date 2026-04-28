@@ -4,6 +4,7 @@ const path = require('path');
 const { extractTextFromResumeFile } = require('../utils/openai');
 const { analyzeResumeLocal } = require('../utils/localAnalyzer');
 const { ATS_TEMPLATES } = require('../utils/resumeTemplates');
+const { scoreResumeWithModel } = require('../utils/modelScorer');
 
 const prisma = new PrismaClient();
 
@@ -34,6 +35,12 @@ const uploadResume = async (req, res) => {
 
     // Analyze resume with local analyzer (NO API needed!)
     const analysis = analyzeResumeLocal(resumeText, { jdHints });
+    const modelResult = scoreResumeWithModel(resumeText, jdHints);
+    if (modelResult && typeof modelResult.score === 'number') {
+      analysis.modelScore = modelResult.score;
+      analysis.scoreSource = 'ml-model';
+      analysis.overallScore = modelResult.score;
+    }
 
     console.log('✅ Analysis complete:', analysis.overallScore);
 
@@ -81,6 +88,12 @@ const analyzeResumeText = async (req, res) => {
     }
 
     const analysis = analyzeResumeLocal(resumeText, { jdHints: jdHints || '' });
+    const modelResult = scoreResumeWithModel(resumeText, jdHints || '');
+    if (modelResult && typeof modelResult.score === 'number') {
+      analysis.modelScore = modelResult.score;
+      analysis.scoreSource = 'ml-model';
+      analysis.overallScore = modelResult.score;
+    }
 
     res.status(200).json({
       message: 'Resume text analyzed successfully',

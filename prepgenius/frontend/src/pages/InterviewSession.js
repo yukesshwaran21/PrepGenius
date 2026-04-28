@@ -176,7 +176,7 @@ const InterviewSession = () => {
             <div>
               <h1 className="text-3xl font-bold text-gray-900">Interview Simulation</h1>
               <p className="text-gray-600 mt-1">
-                {interview.role} • {interview.difficulty.toUpperCase()} • Real-time pressure mode
+                {interview.role} • {interview.difficulty.toUpperCase()} • Set {interview.setIndex || 1}/{interview.setCount || 3}
               </p>
             </div>
 

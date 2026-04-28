@@ -91,6 +91,11 @@ const InterviewHistory = () => {
     if (score >= 40) return 'bg-yellow-50';
     return 'bg-red-50';
   };
+  const difficultyLabels = {
+    beginner: 'low',
+    intermediate: 'medium',
+    advanced: 'hard'
+  };
 
   if (loading) {
     return (
@@ -254,12 +259,13 @@ const InterviewHistory = () => {
                             interview.difficulty === 'intermediate' ? 'bg-yellow-100 text-yellow-800' :
                             'bg-red-100 text-red-800'
                           }`}>
-                            {interview.difficulty.charAt(0).toUpperCase() + interview.difficulty.slice(1)}
+                            {difficultyLabels[interview.difficulty] || interview.difficulty}
                           </span>
                         </div>
                         <p className="text-sm text-gray-600 mb-3">
                           📅 {new Date(interview.createdAt).toLocaleDateString()} at{' '}
                           {new Date(interview.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          {` • Set ${interview.setIndex || 1}/${interview.setCount || 3}`}
                         </p>
                         <div className="flex gap-6 text-sm">
                           <span className="text-gray-600">

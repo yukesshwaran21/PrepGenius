@@ -1,4 +1,9 @@
 {
+  "inputs": [
+    "E:\\PrepGenius\\resume_data.csv",
+    "E:\\PrepGenius\\resume_dataset_2.csv"
+  ],
+  "job_roles": "E:\\PrepGenius\\job_roles.csv",
   "resume_columns": [
     "address",
     "career_objective",

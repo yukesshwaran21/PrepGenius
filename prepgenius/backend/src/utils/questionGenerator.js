@@ -274,23 +274,90 @@ const getAllRoles = () => {
   return Object.keys(questionBank);
 };
 
+const SET_COUNT = 3;
+
+const hashSeed = (value) => {
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i += 1) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+};
+
+const seededShuffle = (arr, seed) => {
+  const result = [...arr];
+  let state = seed >>> 0;
+  for (let i = result.length - 1; i > 0; i -= 1) {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    const j = state % (i + 1);
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+};
+
+const chunkQuestions = (questions) => {
+  const chunkSize = Math.max(1, Math.ceil(questions.length / SET_COUNT));
+  const chunks = [];
+  for (let i = 0; i < questions.length; i += chunkSize) {
+    chunks.push(questions.slice(i, i + chunkSize));
+  }
+  while (chunks.length < SET_COUNT) {
+    chunks.push([]);
+  }
+  return chunks.slice(0, SET_COUNT);
+};
+
+const buildQuestionSet = ({
+  questions,
+  count,
+  setIndex,
+  shuffle,
+  excludedQuestions
+}) => {
+  const safeSetIndex = Math.min(Math.max(setIndex, 1), SET_COUNT);
+  const chunks = chunkQuestions(questions);
+  const basePool = chunks[safeSetIndex - 1].length > 0 ? chunks[safeSetIndex - 1] : questions;
+  const excludedSet = new Set(excludedQuestions || []);
+  const filteredPool = basePool.filter((q) => !excludedSet.has(q));
+  const pool = filteredPool.length >= Math.min(count, basePool.length) ? filteredPool : basePool;
+
+  const prepared = shuffle
+    ? seededShuffle(pool, hashSeed(`${setIndex}:${count}:${pool.length}`))
+    : [...pool];
+
+  const result = [];
+  let index = 0;
+  while (result.length < count && prepared.length > 0) {
+    result.push(prepared[index % prepared.length]);
+    index += 1;
+  }
+
+  return result;
+};
+
 // Get questions for a specific role and difficulty
-const getQuestions = (role, difficulty, count = 5) => {
+const getQuestions = (role, difficulty, options = {}) => {
+  const { count = 10, setIndex = 1, shuffle = true, excludedQuestions = [] } = options;
   const roleQuestions = questionBank[role];
-  
+
   if (!roleQuestions) {
     throw new Error(`Role "${role}" not found`);
   }
-  
+
   const difficultyQuestions = roleQuestions[difficulty];
-  
+
   if (!difficultyQuestions) {
     throw new Error(`Difficulty "${difficulty}" not found for role "${role}"`);
   }
-  
-  // Shuffle and return requested number of questions
-  const shuffled = [...difficultyQuestions].sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, Math.min(count, shuffled.length));
+
+  return buildQuestionSet({
+    questions: difficultyQuestions,
+    count,
+    setIndex,
+    shuffle,
+    excludedQuestions
+  });
 };
 
 // Get all difficulties

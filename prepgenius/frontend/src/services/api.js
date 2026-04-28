@@ -94,8 +94,8 @@ export const resumeAPI = {
 
 // Interview APIs
 export const interviewAPI = {
-  startInterview: (role, difficulty) =>
-    axiosInstance.post('/interview/start', { role, difficulty }).then(res => res.data),
+  startInterview: (role, difficulty, options = {}) =>
+    axiosInstance.post('/interview/start', { role, difficulty, ...options }).then(res => res.data),
   
   getInterviewQuestions: (interviewId) =>
     axiosInstance.get(`/interview/${interviewId}`).then(res => res.data),

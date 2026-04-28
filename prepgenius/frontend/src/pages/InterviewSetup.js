@@ -15,9 +15,15 @@ const InterviewSetup = () => {
     'DevOps Engineer'
   ]);
   
-  const [difficulties] = useState(['beginner', 'intermediate', 'advanced']);
+  const [difficulties] = useState([
+    { value: 'beginner', label: 'low', emoji: '🌱' },
+    { value: 'intermediate', label: 'medium', emoji: '🚀' },
+    { value: 'advanced', label: 'hard', emoji: '⚡' }
+  ]);
   const [selectedRole, setSelectedRole] = useState('');
   const [selectedDifficulty, setSelectedDifficulty] = useState('beginner');
+  const [shuffleQuestions, setShuffleQuestions] = useState(true);
+  const [adaptiveMix, setAdaptiveMix] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -31,7 +37,10 @@ const InterviewSetup = () => {
     setError('');
 
     try {
-      const response = await interviewAPI.startInterview(selectedRole, selectedDifficulty);
+      const response = await interviewAPI.startInterview(selectedRole, selectedDifficulty, {
+        shuffleQuestions,
+        adaptiveMix
+      });
       // Navigate to interview session with interview data
       navigate('/interview-session', { state: { interview: response } });
     } catch (err) {
@@ -88,24 +97,49 @@ const InterviewSetup = () => {
             <div className="grid grid-cols-3 gap-3">
               {difficulties.map(difficulty => (
                 <button
-                  key={difficulty}
-                  onClick={() => setSelectedDifficulty(difficulty)}
+                  key={difficulty.value}
+                  onClick={() => setSelectedDifficulty(difficulty.value)}
                   className={`p-4 rounded-lg border-2 transition capitalize font-medium ${
-                    selectedDifficulty === difficulty
+                    selectedDifficulty === difficulty.value
                       ? 'border-purple-500 bg-purple-50 text-purple-800'
                       : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
                   }`}
                 >
-                  {difficulty === 'beginner' && '🌱'}
-                  {difficulty === 'intermediate' && '🚀'}
-                  {difficulty === 'advanced' && '⚡'}
-                  <span className="ml-2">{difficulty}</span>
+                  {difficulty.emoji}
+                  <span className="ml-2">{difficulty.label}</span>
                 </button>
               ))}
             </div>
             <p className="text-sm text-gray-600 mt-3">
-              💡 Beginner: Basic concepts | Intermediate: Advanced topics | Advanced: Complex scenarios
+              💡 Low: Fundamentals | Medium: Applied topics | Hard: Complex scenarios
             </p>
+          </div>
+
+          {/* Session Options */}
+          <div className="mb-8">
+            <label className="block text-lg font-semibold text-gray-800 mb-4">
+              Session Options
+            </label>
+            <div className="space-y-3">
+              <label className="flex items-center gap-3 text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={shuffleQuestions}
+                  onChange={(e) => setShuffleQuestions(e.target.checked)}
+                  className="h-4 w-4 text-blue-600 rounded"
+                />
+                Shuffle question order
+              </label>
+              <label className="flex items-center gap-3 text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={adaptiveMix}
+                  onChange={(e) => setAdaptiveMix(e.target.checked)}
+                  className="h-4 w-4 text-blue-600 rounded"
+                />
+                Adaptive mix (auto-bump difficulty when you score high)
+              </label>
+            </div>
           </div>
 
           {/* Start Button */}
@@ -125,7 +159,7 @@ const InterviewSetup = () => {
           <div className="mt-8 grid grid-cols-3 gap-4 text-center">
             <div className="p-3 bg-blue-50 rounded-lg">
               <p className="text-2xl">📝</p>
-              <p className="text-sm text-gray-700 font-medium">5 Questions</p>
+              <p className="text-sm text-gray-700 font-medium">10 Questions</p>
             </div>
             <div className="p-3 bg-purple-50 rounded-lg">
               <p className="text-2xl">⏱️</p>
@@ -133,7 +167,7 @@ const InterviewSetup = () => {
             </div>
             <div className="p-3 bg-green-50 rounded-lg">
               <p className="text-2xl">📊</p>
-              <p className="text-sm text-gray-700 font-medium">Instant Feedback</p>
+              <p className="text-sm text-gray-700 font-medium">3 Rotating Sets</p>
             </div>
           </div>
         </div>

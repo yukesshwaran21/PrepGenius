@@ -61,13 +61,29 @@ const InterviewResults = () => {
 
   if (!results) return null;
 
-  const { summary, role, difficulty, createdAt, detailedResults } = results;
+  const {
+    summary,
+    role,
+    difficulty,
+    requestedDifficulty,
+    setIndex,
+    setCount,
+    createdAt,
+    detailedResults
+  } = results;
   const performanceColor = {
     'Excellent': 'from-green-500 to-emerald-600',
     'Good': 'from-blue-500 to-cyan-600',
     'Fair': 'from-yellow-500 to-orange-600',
     'Needs Improvement': 'from-red-500 to-pink-600'
   };
+  const difficultyLabels = {
+    beginner: 'low',
+    intermediate: 'medium',
+    advanced: 'hard'
+  };
+  const displayDifficulty = difficultyLabels[difficulty] || difficulty;
+  const displayRequested = difficultyLabels[requestedDifficulty] || requestedDifficulty;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 py-12 px-4">
@@ -76,7 +92,11 @@ const InterviewResults = () => {
         <div className="text-center mb-12">
           <h1 className="text-4xl font-bold text-gray-900 mb-2">🎉 Interview Complete!</h1>
           <p className="text-gray-600">
-            {new Date(createdAt).toLocaleDateString()} • {role} ({difficulty})
+            {new Date(createdAt).toLocaleDateString()} • {role} ({displayDifficulty})
+            {requestedDifficulty && requestedDifficulty !== difficulty && (
+              <span> • Requested: {displayRequested}</span>
+            )}
+            <span> • Set {setIndex || 1}/{setCount || 3}</span>
           </p>
         </div>
 

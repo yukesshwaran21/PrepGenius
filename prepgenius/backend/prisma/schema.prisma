@@ -44,6 +44,11 @@ model Interview {
   userId      Int
   role        String  // e.g., "Java Developer", "React Developer"
   difficulty  String  // e.g., "beginner", "intermediate", "advanced"
+  requestedDifficulty String? // Original user-selected difficulty
+  setIndex    Int     @default(1)
+  setCount    Int     @default(3)
+  shuffleEnabled Boolean @default(true)
+  adaptiveEnabled Boolean @default(true)
   questionTimeLimitSec Int @default(60)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

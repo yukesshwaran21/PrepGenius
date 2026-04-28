@@ -3,40 +3,120 @@ const { getQuestions, generateFeedback } = require('../utils/questionGenerator')
 
 const prisma = new PrismaClient();
 
+const QUESTION_COUNT = 10;
+const SET_COUNT = 3;
+const COOLDOWN_HOURS = Number(process.env.INTERVIEW_RETAKE_COOLDOWN_HOURS || 4);
+
 const getQuestionTimeLimitByDifficulty = (difficulty) => {
   if (difficulty === 'beginner') return 75;
   if (difficulty === 'advanced') return 45;
   return 60;
 };
 
+const computeAverageScore = (interview) => {
+  const scores = interview.questions
+    .filter(q => q.answers.length > 0 && q.answers[0].score !== null)
+    .map(q => q.answers[0].score);
+  if (scores.length === 0) {
+    return 0;
+  }
+  return Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+};
+
+const bumpDifficulty = (difficulty) => {
+  if (difficulty === 'beginner') return 'intermediate';
+  if (difficulty === 'intermediate') return 'advanced';
+  return 'advanced';
+};
+
 // Start a new interview session
 const startInterview = async (req, res) => {
   try {
-    const { role, difficulty } = req.body;
+    const { role, difficulty, shuffleQuestions = true, adaptiveMix = true } = req.body;
     const userId = req.userId; // From auth middleware
 
     if (!role || !difficulty) {
       return res.status(400).json({ error: 'Role and difficulty are required' });
     }
 
+    // Retake cooldown check
+    if (COOLDOWN_HOURS > 0) {
+      const recentInterview = await prisma.interview.findFirst({
+        where: { userId, role, difficulty },
+        orderBy: { createdAt: 'desc' }
+      });
+
+      if (recentInterview) {
+        const hoursSinceLast = (Date.now() - new Date(recentInterview.createdAt).getTime()) / 3600000;
+        if (hoursSinceLast < COOLDOWN_HOURS) {
+          return res.status(429).json({
+            error: `Please wait ${Math.ceil(COOLDOWN_HOURS - hoursSinceLast)} more hour(s) before retaking this session.`
+          });
+        }
+      }
+    }
+
+    let effectiveDifficulty = difficulty;
+    let requestedDifficulty = difficulty;
+
+    if (adaptiveMix) {
+      const lastInterview = await prisma.interview.findFirst({
+        where: { userId, role },
+        include: { questions: { include: { answers: true } } },
+        orderBy: { createdAt: 'desc' }
+      });
+
+      if (lastInterview) {
+        const lastAverage = computeAverageScore(lastInterview);
+        if (lastAverage >= 80) {
+          effectiveDifficulty = bumpDifficulty(difficulty);
+        }
+      }
+    }
+
     // Validate role and difficulty by trying to get questions
     try {
-      getQuestions(role, difficulty, 5);
+      getQuestions(role, effectiveDifficulty, { count: 1, setIndex: 1, shuffle: true });
     } catch (error) {
       return res.status(400).json({ error: error.message });
     }
 
-    console.log(`🎤 Starting interview for user ${userId}: ${role} (${difficulty})`);
+    console.log(`🎤 Starting interview for user ${userId}: ${role} (${effectiveDifficulty})`);
 
-    const questionTimeLimitSec = getQuestionTimeLimitByDifficulty(difficulty);
+    const questionTimeLimitSec = getQuestionTimeLimitByDifficulty(effectiveDifficulty);
+
+    const lastSetInterview = await prisma.interview.findFirst({
+      where: { userId, role, difficulty: effectiveDifficulty },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    const setIndex = lastSetInterview
+      ? (lastSetInterview.setIndex % SET_COUNT) + 1
+      : 1;
+
+    const recentInterviews = await prisma.interview.findMany({
+      where: { userId, role, difficulty: effectiveDifficulty },
+      include: { questions: true },
+      orderBy: { createdAt: 'desc' },
+      take: 2
+    });
+
+    const excludedQuestions = recentInterviews.flatMap((session) =>
+      session.questions.map((question) => question.questionText)
+    );
 
     // Create interview session
     const interview = await prisma.interview.create({
       data: {
         userId,
         role,
-        difficulty,
-        questionTimeLimitSec
+        difficulty: effectiveDifficulty,
+        requestedDifficulty,
+        questionTimeLimitSec,
+        setIndex,
+        setCount: SET_COUNT,
+        shuffleEnabled: Boolean(shuffleQuestions),
+        adaptiveEnabled: Boolean(adaptiveMix)
       },
       include: {
         questions: true
@@ -44,7 +124,12 @@ const startInterview = async (req, res) => {
     });
 
     // Generate and save questions
-    const questionTexts = getQuestions(role, difficulty, 5);
+    const questionTexts = getQuestions(role, effectiveDifficulty, {
+      count: QUESTION_COUNT,
+      setIndex,
+      shuffle: Boolean(shuffleQuestions),
+      excludedQuestions
+    });
     const questionsWithData = [];
 
     for (const questionText of questionTexts) {
@@ -62,7 +147,12 @@ const startInterview = async (req, res) => {
     res.status(201).json({
       interviewId: interview.id,
       role,
-      difficulty,
+      difficulty: effectiveDifficulty,
+      requestedDifficulty,
+      setIndex,
+      setCount: SET_COUNT,
+      shuffleEnabled: Boolean(shuffleQuestions),
+      adaptiveEnabled: Boolean(adaptiveMix),
       questionTimeLimitSec,
       totalQuestions: questionsWithData.length,
       questions: questionsWithData
@@ -103,6 +193,11 @@ const getInterviewQuestions = async (req, res) => {
       interviewId: interview.id,
       role: interview.role,
       difficulty: interview.difficulty,
+      requestedDifficulty: interview.requestedDifficulty || interview.difficulty,
+      setIndex: interview.setIndex || 1,
+      setCount: interview.setCount || 3,
+      shuffleEnabled: interview.shuffleEnabled ?? true,
+      adaptiveEnabled: interview.adaptiveEnabled ?? true,
       questionTimeLimitSec: interview.questionTimeLimitSec,
       questions: interview.questions.map(q => ({
         id: q.id,
@@ -262,6 +357,11 @@ const getInterviewResults = async (req, res) => {
       interviewId: interview.id,
       role: interview.role,
       difficulty: interview.difficulty,
+      requestedDifficulty: interview.requestedDifficulty || interview.difficulty,
+      setIndex: interview.setIndex || 1,
+      setCount: interview.setCount || 3,
+      shuffleEnabled: interview.shuffleEnabled ?? true,
+      adaptiveEnabled: interview.adaptiveEnabled ?? true,
       questionTimeLimitSec: interview.questionTimeLimitSec,
       createdAt: interview.createdAt,
       summary: {
@@ -322,6 +422,11 @@ const getUserInterviews = async (req, res) => {
         id: interview.id,
         role: interview.role,
         difficulty: interview.difficulty,
+        requestedDifficulty: interview.requestedDifficulty || interview.difficulty,
+        setIndex: interview.setIndex || 1,
+        setCount: interview.setCount || 3,
+        shuffleEnabled: interview.shuffleEnabled ?? true,
+        adaptiveEnabled: interview.adaptiveEnabled ?? true,
         createdAt: interview.createdAt,
         questionTimeLimitSec: interview.questionTimeLimitSec,
         totalQuestions: interview.questions.length,
