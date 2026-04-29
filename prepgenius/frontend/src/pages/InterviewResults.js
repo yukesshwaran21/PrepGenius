@@ -222,6 +222,14 @@ const InterviewResults = () => {
                             </p>
                           </div>
                         )}
+                        {result.explanation && (
+                          <div className="mb-4">
+                            <h4 className="font-semibold text-gray-900 mb-2">Explanation:</h4>
+                            <p className="text-gray-700 whitespace-pre-wrap bg-white p-3 rounded border border-gray-200">
+                              {result.explanation}
+                            </p>
+                          </div>
+                        )}
                         <div className="mb-4">
                           <h4 className="font-semibold text-gray-900 mb-2">Feedback:</h4>
                           <div className={`p-3 rounded ${

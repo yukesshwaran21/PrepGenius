@@ -1,38 +1,21 @@
 // Question bank organized by role and difficulty
-const makeOptions = (correctText, distractors, seed) => {
-  const rawOptions = [
-    { text: correctText, isCorrect: true },
-    ...distractors.map((text) => ({ text, isCorrect: false }))
-  ];
-
-  // Deterministic shuffle so correct answers do not always map to the same option ID.
-  const options = [...rawOptions];
-  let state = 2166136261;
-  for (let i = 0; i < seed.length; i += 1) {
-    state ^= seed.charCodeAt(i);
-    state = Math.imul(state, 16777619);
-  }
-  for (let i = options.length - 1; i > 0; i -= 1) {
-    state = (state * 1664525 + 1013904223) >>> 0;
-    const j = state % (i + 1);
-    [options[i], options[j]] = [options[j], options[i]];
-  }
-
+const createOptions = (correctText, distractors) => {
   const optionIds = ['A', 'B', 'C', 'D'];
-  return options.map((option, index) => ({
+  const texts = [correctText, ...distractors];
+  return texts.map((text, index) => ({
     id: optionIds[index],
-    text: option.text,
-    isCorrect: option.isCorrect
+    text
   }));
 };
 
 const mcq = (questionText, correctText, distractors) => {
-  const options = makeOptions(correctText, distractors, questionText);
-  const correctOption = options.find((option) => option.isCorrect);
+  const options = createOptions(correctText, distractors);
+  const correctOptionId = 'A';
   return {
     questionText,
-    options: options.map(({ id, text }) => ({ id, text })),
-    correctOptionId: correctOption ? correctOption.id : 'A'
+    options,
+    correctOptionId,
+    explanation: `Correct because ${correctText}`
   };
 };
 
@@ -1869,6 +1852,27 @@ const seededShuffle = (arr, seed) => {
   return result;
 };
 
+const shuffleOptionsForSession = (questionItem, seed) => {
+  const optionIds = ['A', 'B', 'C', 'D'];
+  const optionsWithCorrect = (questionItem.options || []).map((option) => ({
+    text: option.text,
+    isCorrect: option.id === questionItem.correctOptionId
+  }));
+
+  const shuffled = seededShuffle(optionsWithCorrect, hashSeed(seed));
+  const options = shuffled.map((option, index) => ({
+    id: optionIds[index],
+    text: option.text
+  }));
+  const correctIndex = shuffled.findIndex((option) => option.isCorrect);
+  const correctOptionId = correctIndex >= 0 ? optionIds[correctIndex] : 'A';
+
+  return {
+    options,
+    correctOptionId
+  };
+};
+
 const normalizeQuestionText = (question) => {
   if (!question) {
     return '';
@@ -1948,5 +1952,6 @@ const getAllDifficulties = () => {
 module.exports = {
   getAllRoles,
   getQuestions,
-  getAllDifficulties
+  getAllDifficulties,
+  shuffleOptionsForSession
 };

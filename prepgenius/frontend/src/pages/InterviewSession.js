@@ -202,7 +202,14 @@ const InterviewSession = () => {
         </div>
 
         <div className="bg-white rounded-lg shadow-lg p-8 mb-6">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6">Question {currentQuestionIndex + 1}</h2>
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-2xl font-bold text-gray-900">Question {currentQuestionIndex + 1}</h2>
+            {currentQuestion.difficultyTag && (
+              <span className="text-xs font-semibold uppercase tracking-wide px-3 py-1 rounded-full bg-indigo-100 text-indigo-700">
+                {currentQuestion.difficultyTag}
+              </span>
+            )}
+          </div>
           <p className="text-lg text-gray-700 mb-8 leading-relaxed">{currentQuestion.questionText}</p>
 
           <div className="mb-6">

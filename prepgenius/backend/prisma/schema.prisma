@@ -66,6 +66,8 @@ model Question {
   questionText String
   options     Json?
   correctOptionId String?
+  explanation String?
+  difficultyTag String?
   createdAt   DateTime @default(now())
 
   // Relations
@@ -81,6 +83,9 @@ model Answer {
   userAnswer  String
   aiFeedback  String?
   score       Int?    // 0-100
+  adaptiveScore Float?
+  scoreBreakdown Json?
+  streakCount Int? @default(0)
   answerStartedAt DateTime?
   answerSubmittedAt DateTime?
   timeSpentSeconds Int?

@@ -1,5 +1,5 @@
 const { PrismaClient } = require('@prisma/client');
-const { getQuestions } = require('../utils/questionGenerator');
+const { getQuestions, shuffleOptionsForSession } = require('../utils/questionGenerator');
 
 const prisma = new PrismaClient();
 
@@ -134,12 +134,18 @@ const startInterview = async (req, res) => {
     const questionsWithData = [];
 
     for (const questionItem of questionItems) {
+      const shuffledOptions = shuffleOptionsForSession(
+        questionItem,
+        `${interview.id}:${questionItem.questionText}`
+      );
       const question = await prisma.question.create({
         data: {
           interviewId: interview.id,
           questionText: questionItem.questionText,
-          options: questionItem.options,
-          correctOptionId: questionItem.correctOptionId
+          options: shuffledOptions.options,
+          correctOptionId: shuffledOptions.correctOptionId,
+          explanation: questionItem.explanation || null,
+          difficultyTag: effectiveDifficulty
         }
       });
       questionsWithData.push(question);
@@ -161,7 +167,8 @@ const startInterview = async (req, res) => {
       questions: questionsWithData.map((question) => ({
         id: question.id,
         questionText: question.questionText,
-        options: question.options || []
+        options: question.options || [],
+        difficultyTag: question.difficultyTag || null
       }))
     });
   } catch (error) {
@@ -210,6 +217,7 @@ const getInterviewQuestions = async (req, res) => {
         id: q.id,
         questionText: q.questionText,
         options: q.options || [],
+        difficultyTag: q.difficultyTag || null,
         answered: q.answers.length > 0,
         answer: q.answers[0]?.userAnswer || null,
         feedback: q.answers[0]?.aiFeedback || null,
@@ -404,6 +412,8 @@ const getInterviewResults = async (req, res) => {
         questionText: q.questionText,
         options: q.options || [],
         correctOptionId: q.correctOptionId || null,
+        explanation: q.explanation || null,
+        difficultyTag: q.difficultyTag || null,
         userAnswer: q.answers[0]?.userAnswer || null,
         feedback: q.answers[0]?.aiFeedback || null,
         score: q.answers[0]?.score || null,
