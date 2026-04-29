@@ -64,6 +64,8 @@ model Question {
   id          Int     @id @default(autoincrement())
   interviewId Int
   questionText String
+  options     Json?
+  correctOptionId String?
   createdAt   DateTime @default(now())
 
   // Relations

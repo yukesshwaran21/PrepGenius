@@ -1,5 +1,5 @@
 const { PrismaClient } = require('@prisma/client');
-const { getQuestions, generateFeedback } = require('../utils/questionGenerator');
+const { getQuestions } = require('../utils/questionGenerator');
 
 const prisma = new PrismaClient();
 
@@ -20,7 +20,8 @@ const computeAverageScore = (interview) => {
   if (scores.length === 0) {
     return 0;
   }
-  return Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+  const totalMarks = scores.reduce((a, b) => a + b, 0);
+  return Math.round((totalMarks / scores.length) * 100);
 };
 
 const bumpDifficulty = (difficulty) => {
@@ -124,7 +125,7 @@ const startInterview = async (req, res) => {
     });
 
     // Generate and save questions
-    const questionTexts = getQuestions(role, effectiveDifficulty, {
+    const questionItems = getQuestions(role, effectiveDifficulty, {
       count: QUESTION_COUNT,
       setIndex,
       shuffle: Boolean(shuffleQuestions),
@@ -132,11 +133,13 @@ const startInterview = async (req, res) => {
     });
     const questionsWithData = [];
 
-    for (const questionText of questionTexts) {
+    for (const questionItem of questionItems) {
       const question = await prisma.question.create({
         data: {
           interviewId: interview.id,
-          questionText
+          questionText: questionItem.questionText,
+          options: questionItem.options,
+          correctOptionId: questionItem.correctOptionId
         }
       });
       questionsWithData.push(question);
@@ -155,7 +158,11 @@ const startInterview = async (req, res) => {
       adaptiveEnabled: Boolean(adaptiveMix),
       questionTimeLimitSec,
       totalQuestions: questionsWithData.length,
-      questions: questionsWithData
+      questions: questionsWithData.map((question) => ({
+        id: question.id,
+        questionText: question.questionText,
+        options: question.options || []
+      }))
     });
   } catch (error) {
     console.error('Error starting interview:', error);
@@ -202,6 +209,7 @@ const getInterviewQuestions = async (req, res) => {
       questions: interview.questions.map(q => ({
         id: q.id,
         questionText: q.questionText,
+        options: q.options || [],
         answered: q.answers.length > 0,
         answer: q.answers[0]?.userAnswer || null,
         feedback: q.answers[0]?.aiFeedback || null,
@@ -257,10 +265,23 @@ const submitAnswer = async (req, res) => {
       return res.status(403).json({ error: 'Unauthorized' });
     }
 
+    const optionIds = new Set((question.options || []).map((option) => String(option.id).toUpperCase()));
+    const selectedOptionId = (normalizedAnswer || '').toUpperCase();
+
+    if (!isTimedOut && (!selectedOptionId || !optionIds.has(selectedOptionId))) {
+      return res.status(400).json({ error: 'Invalid answer option selected' });
+    }
+
     // Generate feedback and score
     const answerToEvaluate = normalizedAnswer || 'No response submitted before timeout.';
-
-    const { score, feedback } = generateFeedback(question.questionText, answerToEvaluate);
+    const correctOptionId = (question.correctOptionId || '').toUpperCase();
+    const isCorrect = Boolean(correctOptionId && selectedOptionId && correctOptionId === selectedOptionId);
+    const score = isCorrect ? 1 : 0;
+    const feedback = isTimedOut
+      ? 'No response submitted before timeout.'
+      : isCorrect
+      ? 'Correct answer.'
+      : `Incorrect answer. Correct option: ${correctOptionId || 'N/A'}.`;
 
     console.log(`📝 Answer submitted for question ${questionId}, score: ${score}`);
 
@@ -290,6 +311,9 @@ const submitAnswer = async (req, res) => {
       answerId: answer.id,
       score,
       feedback,
+      isCorrect,
+      correctOptionId: correctOptionId || null,
+      selectedOptionId: selectedOptionId || null,
       timedOut: answer.timedOut,
       autoSubmitted: answer.autoSubmitted,
       timeSpentSeconds: answer.timeSpentSeconds
@@ -332,8 +356,8 @@ const getInterviewResults = async (req, res) => {
     const scores = interview.questions
       .filter(q => q.answers.length > 0 && q.answers[0].score !== null)
       .map(q => q.answers[0].score);
-
-    const averageScore = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
+    const totalMarks = scores.reduce((a, b) => a + b, 0);
+    const averageScore = totalQuestions > 0 ? Math.round((totalMarks / totalQuestions) * 100) : 0;
     const maxScore = scores.length > 0 ? Math.max(...scores) : 0;
     const minScore = scores.length > 0 ? Math.min(...scores) : 0;
     const timedOutCount = interview.questions.filter(q => q.answers[0]?.timedOut).length;
@@ -367,6 +391,7 @@ const getInterviewResults = async (req, res) => {
       summary: {
         totalQuestions,
         answeredQuestions,
+        totalMarks,
         averageScore,
         maxScore,
         minScore,
@@ -377,9 +402,12 @@ const getInterviewResults = async (req, res) => {
       detailedResults: interview.questions.map(q => ({
         id: q.id,
         questionText: q.questionText,
+        options: q.options || [],
+        correctOptionId: q.correctOptionId || null,
         userAnswer: q.answers[0]?.userAnswer || null,
         feedback: q.answers[0]?.aiFeedback || null,
         score: q.answers[0]?.score || null,
+        isCorrect: q.answers[0]?.score === 1,
         answered: q.answers.length > 0,
         timedOut: q.answers[0]?.timedOut || false,
         autoSubmitted: q.answers[0]?.autoSubmitted || false,
@@ -416,7 +444,10 @@ const getUserInterviews = async (req, res) => {
         .filter(q => q.answers.length > 0 && q.answers[0].score !== null)
         .map(q => q.answers[0].score);
 
-      const averageScore = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
+      const totalMarks = scores.reduce((a, b) => a + b, 0);
+      const averageScore = interview.questions.length > 0
+        ? Math.round((totalMarks / interview.questions.length) * 100)
+        : 0;
 
       return {
         id: interview.id,

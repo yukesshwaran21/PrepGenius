@@ -42,6 +42,7 @@ const InterviewSession = () => {
 
   const hasSubmittedCurrent = currentQuestion ? Boolean(submittedAnswers[currentQuestion.id]) : false;
   const feedback = currentQuestion ? (feedbackByQuestion[currentQuestion.id] || null) : null;
+  const currentOptions = currentQuestion?.options || [];
 
   useEffect(() => {
     if (!hasInterview || !currentQuestion) {
@@ -90,13 +91,13 @@ const InterviewSession = () => {
     }
 
     if (!timedOut && !currentAnswer.trim()) {
-      alert('Please provide an answer');
+      alert('Please select an answer');
       return;
     }
 
     const submittedAt = new Date();
     const answerToStore = timedOut && !currentAnswer.trim()
-      ? 'No response submitted before timeout.'
+      ? ''
       : currentAnswer;
 
     setLoading(true);
@@ -162,7 +163,7 @@ const InterviewSession = () => {
     return 'text-emerald-600';
   }, [timeLeft]);
 
-  const isInputLocked = showFeedback || loading || hasSubmittedCurrent || timeLeft === 0;
+  const isInputLocked = showFeedback || loading || hasSubmittedCurrent || timeLeft === 0 || currentOptions.length === 0;
 
   if (!hasInterview || !currentQuestion) {
     return null;
@@ -205,30 +206,44 @@ const InterviewSession = () => {
           <p className="text-lg text-gray-700 mb-8 leading-relaxed">{currentQuestion.questionText}</p>
 
           <div className="mb-6">
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Your Answer</label>
-            <textarea
-              value={currentAnswer}
-              onChange={(e) => setCurrentAnswer(e.target.value)}
-              disabled={isInputLocked}
-              rows="6"
-              placeholder="Type your answer here. Keep it concise and impact-driven..."
-              className="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none disabled:bg-gray-100 disabled:text-gray-500"
-            />
-            <div className="flex justify-between items-center mt-2">
-              <p className="text-sm text-gray-500">
-                Word count: {currentAnswer.split(/\s+/).filter((w) => w.length > 0).length}
-              </p>
-              {timeLeft <= 10 && !showFeedback && (
-                <p className="text-sm text-red-600 font-semibold">Hurry up. Auto-submit imminent.</p>
+            <label className="block text-sm font-semibold text-gray-700 mb-3">Choose an Answer</label>
+            <div className="space-y-3">
+              {currentOptions.length === 0 && (
+                <p className="text-sm text-red-600">Options are unavailable for this question.</p>
               )}
+              {currentOptions.map((option) => (
+                <label
+                  key={option.id}
+                  className={`flex items-start gap-3 border rounded-lg p-3 cursor-pointer transition ${
+                    currentAnswer === option.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+                  } ${isInputLocked ? 'opacity-70 cursor-not-allowed' : 'hover:border-blue-400'}`}
+                >
+                  <input
+                    type="radio"
+                    name={`question-${currentQuestion.id}`}
+                    value={option.id}
+                    disabled={isInputLocked}
+                    checked={currentAnswer === option.id}
+                    onChange={() => setCurrentAnswer(option.id)}
+                    className="mt-1"
+                  />
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">{option.id}.</p>
+                    <p className="text-gray-700">{option.text}</p>
+                  </div>
+                </label>
+              ))}
             </div>
+            {timeLeft <= 10 && !showFeedback && (
+              <p className="text-sm text-red-600 font-semibold mt-2">Hurry up. Auto-submit imminent.</p>
+            )}
           </div>
 
           {showFeedback && feedback && (
             <div className="mb-6 p-6 bg-blue-50 border-2 border-blue-200 rounded-lg">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-blue-900">AI Feedback</h3>
-                <div className="text-4xl font-bold text-blue-600">{feedback.score}/100</div>
+                <div className="text-4xl font-bold text-blue-600">{feedback.score}/1</div>
               </div>
               <p className="text-gray-700 mb-3">{feedback.feedback}</p>
 

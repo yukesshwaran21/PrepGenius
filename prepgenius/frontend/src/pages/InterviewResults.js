@@ -85,6 +85,11 @@ const InterviewResults = () => {
   const displayDifficulty = difficultyLabels[difficulty] || difficulty;
   const displayRequested = difficultyLabels[requestedDifficulty] || requestedDifficulty;
 
+  const getOptionText = (options, optionId) => {
+    const option = options.find((item) => item.id === optionId);
+    return option ? option.text : null;
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 py-12 px-4">
       <div className="max-w-4xl mx-auto">
@@ -104,7 +109,9 @@ const InterviewResults = () => {
         <div className={`bg-gradient-to-r ${performanceColor[summary.performanceTier]} rounded-lg shadow-2xl p-12 text-white mb-8`}>
           <div className="text-center">
             <p className="text-lg opacity-90 mb-2">Your Performance</p>
-            <p className="text-6xl font-bold mb-4">{summary.averageScore}</p>
+            <p className="text-6xl font-bold mb-4">
+              {summary.totalMarks}/{summary.totalQuestions}
+            </p>
             <p className="text-2xl font-semibold mb-8">{summary.performanceTier}</p>
             
             {/* Stats Grid */}
@@ -114,12 +121,12 @@ const InterviewResults = () => {
                 <p className="text-3xl font-bold">{summary.answeredQuestions}/{summary.totalQuestions}</p>
               </div>
               <div>
-                <p className="opacity-90">Average Score</p>
-                <p className="text-3xl font-bold">{summary.averageScore}</p>
+                <p className="opacity-90">Accuracy</p>
+                <p className="text-3xl font-bold">{summary.averageScore}%</p>
               </div>
               <div>
-                <p className="opacity-90">Best Answer</p>
-                <p className="text-3xl font-bold">{summary.maxScore}</p>
+                <p className="opacity-90">Correct Answers</p>
+                <p className="text-3xl font-bold">{summary.totalMarks}</p>
               </div>
             </div>
           </div>
@@ -134,8 +141,8 @@ const InterviewResults = () => {
           </div>
           <div className="bg-white rounded-lg shadow p-6 text-center">
             <p className="text-3xl mb-2">📊</p>
-            <p className="text-sm text-gray-600">Average Score</p>
-            <p className="text-2xl font-bold text-blue-600">{summary.averageScore}</p>
+            <p className="text-sm text-gray-600">Accuracy</p>
+            <p className="text-2xl font-bold text-blue-600">{summary.averageScore}%</p>
           </div>
           <div className="bg-white rounded-lg shadow p-6 text-center">
             <p className="text-3xl mb-2">📉</p>
@@ -168,8 +175,8 @@ const InterviewResults = () => {
                   <div className="text-left flex-1">
                     <div className="flex items-center gap-3">
                       <span className="text-2xl">
-                        {result.answered ? 
-                          (result.score >= 80 ? '🟢' : result.score >= 60 ? '🟡' : '🔴')
+                        {result.answered
+                          ? (result.isCorrect ? '🟢' : '🔴')
                           : '⚫'
                         }
                       </span>
@@ -177,7 +184,7 @@ const InterviewResults = () => {
                         <p className="font-semibold text-gray-900 text-left">Q{idx + 1}: {result.questionText}</p>
                         {result.answered && (
                           <p className="text-sm text-gray-600 mt-1">
-                            Score: <span className="font-bold">{result.score}/100</span>
+                            Score: <span className="font-bold">{result.score}/1</span>
                             {result.timeSpentSeconds !== null && result.timeSpentSeconds !== undefined && (
                               <span className="ml-2">• Time: {result.timeSpentSeconds}s</span>
                             )}
@@ -202,14 +209,23 @@ const InterviewResults = () => {
                         <div className="mb-4">
                           <h4 className="font-semibold text-gray-900 mb-2">Your Answer:</h4>
                           <p className="text-gray-700 whitespace-pre-wrap bg-white p-3 rounded border border-gray-200">
-                            {result.userAnswer}
+                            {result.userAnswer
+                              ? `${result.userAnswer}. ${getOptionText(result.options, result.userAnswer) || 'No option text found.'}`
+                              : 'No answer provided.'}
                           </p>
                         </div>
+                        {result.answered && !result.isCorrect && result.correctOptionId && (
+                          <div className="mb-4">
+                            <h4 className="font-semibold text-gray-900 mb-2">Correct Answer:</h4>
+                            <p className="text-gray-700 whitespace-pre-wrap bg-white p-3 rounded border border-gray-200">
+                              {`${result.correctOptionId}. ${getOptionText(result.options, result.correctOptionId) || 'No option text found.'}`}
+                            </p>
+                          </div>
+                        )}
                         <div className="mb-4">
                           <h4 className="font-semibold text-gray-900 mb-2">Feedback:</h4>
                           <div className={`p-3 rounded ${
-                            result.score >= 80 ? 'bg-green-50 text-green-700 border border-green-200' :
-                            result.score >= 60 ? 'bg-yellow-50 text-yellow-700 border border-yellow-200' :
+                            result.isCorrect ? 'bg-green-50 text-green-700 border border-green-200' :
                             'bg-red-50 text-red-700 border border-red-200'
                           }`}>
                             {result.feedback}
