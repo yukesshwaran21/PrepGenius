@@ -1,0 +1,6 @@
+{
+  "cases": [
+    { "input": "-5 10", "expectedOutput": "5" },
+    { "input": "1000000000 1000000000", "expectedOutput": "2000000000" }
+  ]
+}

@@ -10,6 +10,7 @@ import InterviewResults from './pages/InterviewResults';
 import InterviewHistory from './pages/InterviewHistory';
 import History from './pages/History';
 import Profile from './pages/Profile';
+import Coding from './pages/Coding';
 import PrivateRoute from './components/PrivateRoute';
 import './App.css';
 
@@ -90,6 +91,15 @@ function App() {
           element={
             <PrivateRoute>
               <Profile />
+            </PrivateRoute>
+          }
+        />
+
+        <Route
+          path="/coding"
+          element={
+            <PrivateRoute>
+              <Coding />
             </PrivateRoute>
           }
         />

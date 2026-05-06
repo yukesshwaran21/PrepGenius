@@ -146,6 +146,11 @@ const InterviewSetup = () => {
                     value: 'live',
                     title: 'Live Interviewer',
                     description: 'Follow-up questions on incorrect answers.'
+                  },
+                  {
+                    value: 'coding',
+                    title: 'Coding Interview',
+                    description: 'Solve 5 coding tasks with run + submit.'
                   }
                 ].map((mode) => (
                   <button
@@ -164,24 +169,31 @@ const InterviewSetup = () => {
               </div>
             </div>
             <div className="space-y-3">
-              <label className="flex items-center gap-3 text-gray-700">
+              <label className={`flex items-center gap-3 ${selectedMode === 'coding' ? 'text-gray-400' : 'text-gray-700'}`}>
                 <input
                   type="checkbox"
                   checked={shuffleQuestions}
                   onChange={(e) => setShuffleQuestions(e.target.checked)}
+                  disabled={selectedMode === 'coding'}
                   className="h-4 w-4 text-blue-600 rounded"
                 />
                 Shuffle question order
               </label>
-              <label className="flex items-center gap-3 text-gray-700">
+              <label className={`flex items-center gap-3 ${selectedMode === 'coding' ? 'text-gray-400' : 'text-gray-700'}`}>
                 <input
                   type="checkbox"
                   checked={adaptiveMix}
                   onChange={(e) => setAdaptiveMix(e.target.checked)}
+                  disabled={selectedMode === 'coding'}
                   className="h-4 w-4 text-blue-600 rounded"
                 />
                 Adaptive mix (auto-bump difficulty when you score high)
               </label>
+              {selectedMode === 'coding' && (
+                <p className="text-sm text-gray-500">
+                  Coding mode runs 5 problems per difficulty and ignores MCQ settings.
+                </p>
+              )}
             </div>
           </div>
 
@@ -202,7 +214,9 @@ const InterviewSetup = () => {
           <div className="mt-8 grid grid-cols-3 gap-4 text-center">
             <div className="p-3 bg-blue-50 rounded-lg">
               <p className="text-2xl">📝</p>
-              <p className="text-sm text-gray-700 font-medium">10 Questions</p>
+              <p className="text-sm text-gray-700 font-medium">
+                {selectedMode === 'coding' ? '5 Problems' : '10 Questions'}
+              </p>
             </div>
             <div className="p-3 bg-purple-50 rounded-lg">
               <p className="text-2xl">⏱️</p>

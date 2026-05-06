@@ -114,4 +114,22 @@ export const interviewAPI = {
     axiosInstance.get('/interview', { params: { limit } }).then(res => res.data)
 };
 
+// Coding APIs
+export const codingAPI = {
+  listProblems: () =>
+    axiosInstance.get('/coding/problems').then(res => res.data),
+
+  getProblemDetail: (slug) =>
+    axiosInstance.get(`/coding/problems/${slug}`).then(res => res.data),
+
+  runCode: (payload) =>
+    axiosInstance.post('/coding/run', payload).then(res => res.data),
+
+  submitCode: (payload) =>
+    axiosInstance.post('/coding/submit', payload).then(res => res.data),
+
+  listSubmissions: (problemId) =>
+    axiosInstance.get('/coding/submissions', { params: { problemId } }).then(res => res.data)
+};
+
 export default axiosInstance;

@@ -1,8 +1,347 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { interviewAPI } from '../services/api';
+import Editor from '@monaco-editor/react';
+import { interviewAPI, codingAPI } from '../services/api';
 
 const AUTO_NEXT_DELAY_MS = 1800;
+
+const CODING_LANGUAGES = [
+  { label: 'C', value: 'c', monaco: 'c' },
+  { label: 'Java', value: 'java', monaco: 'java' },
+  { label: 'Python', value: 'python', monaco: 'python' }
+];
+
+const formatDuration = (totalSeconds) => {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+};
+
+const CodingInterviewSession = ({ interview }) => {
+  const navigate = useNavigate();
+  const problems = interview?.codingProblems || [];
+
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [language, setLanguage] = useState('c');
+  const [sourceCode, setSourceCode] = useState('');
+  const [results, setResults] = useState(null);
+  const [running, setRunning] = useState(false);
+  const [passedBySlug, setPassedBySlug] = useState({});
+  const [sessionSeconds, setSessionSeconds] = useState(0);
+
+  const currentProblem = problems[currentIndex] || null;
+  const completedCount = Object.values(passedBySlug).filter(Boolean).length;
+  const isSessionComplete = completedCount === problems.length && problems.length > 0;
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setSessionSeconds((value) => value + 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!currentProblem) {
+      return;
+    }
+    const starter = currentProblem.starterCode?.[language] || '';
+    setSourceCode(starter);
+    setResults(null);
+  }, [currentProblem, language]);
+
+  const monacoLanguage = useMemo(() => {
+    const match = CODING_LANGUAGES.find((option) => option.value === language);
+    return match?.monaco || 'plaintext';
+  }, [language]);
+
+  const handleRun = async () => {
+    if (!currentProblem || !sourceCode.trim()) {
+      return;
+    }
+    setRunning(true);
+    setResults(null);
+    try {
+      const response = await codingAPI.runCode({
+        slug: currentProblem.slug,
+        language,
+        sourceCode
+      });
+      setResults({ type: 'run', payload: response });
+    } catch (error) {
+      setResults({
+        type: 'error',
+        payload: { message: error.response?.data?.error || 'Run failed.' }
+      });
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!currentProblem || !sourceCode.trim()) {
+      return;
+    }
+    setRunning(true);
+    setResults(null);
+    try {
+      const response = await codingAPI.submitCode({
+        slug: currentProblem.slug,
+        language,
+        sourceCode
+      });
+      setResults({ type: 'submit', payload: response });
+
+      if (response.status === 'passed' && response.passedTests === response.totalTests) {
+        setPassedBySlug((prev) => ({
+          ...prev,
+          [currentProblem.slug]: true
+        }));
+      }
+    } catch (error) {
+      setResults({
+        type: 'error',
+        payload: { message: error.response?.data?.error || 'Submission failed.' }
+      });
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  const moveNext = () => {
+    if (currentIndex < problems.length - 1) {
+      setCurrentIndex((prev) => prev + 1);
+    }
+  };
+
+  if (!currentProblem) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-100">
+        <div className="text-center">
+          <p className="text-slate-600">No coding problems available.</p>
+          <button
+            onClick={() => navigate('/interview-setup')}
+            className="mt-4 bg-slate-900 text-white px-4 py-2 rounded-lg"
+          >
+            Back to Setup
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-100 py-10 px-4">
+      <div className="max-w-6xl mx-auto">
+        <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900">Coding Interview</h1>
+              <p className="text-sm text-slate-500">
+                Difficulty {interview?.difficulty?.toUpperCase()} • Session {formatDuration(sessionSeconds)}
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-semibold uppercase tracking-wide px-3 py-1 rounded-full bg-slate-100 text-slate-700">
+                Problem {currentIndex + 1} of {problems.length}
+              </span>
+              <span className="text-xs font-semibold uppercase tracking-wide px-3 py-1 rounded-full bg-emerald-100 text-emerald-700">
+                Passed {completedCount}/{problems.length}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <aside className="lg:col-span-1 space-y-4">
+            <div className="bg-white rounded-xl shadow-sm p-5">
+              <h2 className="text-lg font-semibold text-slate-800 mb-3">Problems</h2>
+              <div className="space-y-2">
+                {problems.map((problem, index) => (
+                  <button
+                    key={problem.slug}
+                    onClick={() => setCurrentIndex(index)}
+                    className={`w-full text-left px-3 py-2 rounded-lg border transition ${
+                      index === currentIndex
+                        ? 'border-slate-900 bg-slate-900 text-white'
+                        : 'border-slate-200 bg-white hover:border-slate-400'
+                    }`}
+                  >
+                    <div className="font-semibold text-sm">{problem.title}</div>
+                    <div className={`text-xs ${index === currentIndex ? 'text-slate-200' : 'text-slate-500'}`}>
+                      {problem.difficulty}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm p-5">
+              <h3 className="text-sm font-semibold text-slate-800 mb-2">Sample Tests</h3>
+              <div className="space-y-2 text-xs text-slate-600">
+                {(currentProblem.sampleTests || []).map((testCase, index) => (
+                  <div key={`${testCase.input}-${index}`} className="border border-slate-200 rounded-lg p-2">
+                    <div><strong>Input:</strong> {testCase.input}</div>
+                    <div><strong>Output:</strong> {testCase.expectedOutput}</div>
+                  </div>
+                ))}
+                {(!currentProblem.sampleTests || currentProblem.sampleTests.length === 0) && (
+                  <p className="text-slate-400">No sample tests available.</p>
+                )}
+              </div>
+            </div>
+          </aside>
+
+          <section className="lg:col-span-2 space-y-6">
+            <div className="bg-white rounded-xl shadow-sm p-6">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+                <div>
+                  <h2 className="text-2xl font-bold text-slate-900">{currentProblem.title}</h2>
+                  <p className="text-sm text-slate-500">Time limit {currentProblem.timeLimitMs}ms</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <select
+                    value={language}
+                    onChange={(event) => setLanguage(event.target.value)}
+                    className="border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                  >
+                    {CODING_LANGUAGES.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={handleRun}
+                    disabled={running}
+                    className="bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-slate-800 transition"
+                  >
+                    Run
+                  </button>
+                  <button
+                    onClick={handleSubmit}
+                    disabled={running}
+                    className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-emerald-700 transition"
+                  >
+                    Submit
+                  </button>
+                </div>
+              </div>
+
+              <div className="prose max-w-none text-slate-700 whitespace-pre-line mb-6">
+                {currentProblem.description}
+              </div>
+
+              <div className="rounded-xl overflow-hidden border border-slate-200">
+                <Editor
+                  height="360px"
+                  language={monacoLanguage}
+                  value={sourceCode}
+                  onChange={(value) => setSourceCode(value || '')}
+                  theme="vs"
+                  options={{
+                    fontSize: 14,
+                    minimap: { enabled: false },
+                    scrollBeyondLastLine: false
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm p-6">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-lg font-semibold text-slate-800">Results</h3>
+                <button
+                  onClick={moveNext}
+                  disabled={!passedBySlug[currentProblem.slug] || currentIndex === problems.length - 1}
+                  className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${
+                    passedBySlug[currentProblem.slug] && currentIndex < problems.length - 1
+                      ? 'bg-indigo-600 text-white hover:bg-indigo-700'
+                      : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                  }`}
+                >
+                  Next Problem
+                </button>
+              </div>
+
+              {!results && (
+                <p className="text-slate-500">Run or submit to see outputs and analysis.</p>
+              )}
+              {results?.type === 'error' && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+                  {results.payload.message}
+                </div>
+              )}
+              {(results?.type === 'run' || results?.type === 'submit') && (
+                <div className="space-y-4">
+                  <div className="flex flex-wrap gap-3 text-sm">
+                    <span className="px-3 py-1 rounded-full bg-slate-900 text-white">
+                      {results.payload.status}
+                    </span>
+                    <span className="px-3 py-1 rounded-full bg-slate-100 text-slate-700">
+                      {results.payload.passedTests}/{results.payload.totalTests} tests
+                    </span>
+                    <span className="px-3 py-1 rounded-full bg-slate-100 text-slate-700">
+                      {results.payload.runtimeMs} ms
+                    </span>
+                    {results.payload.score !== undefined && (
+                      <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-700">
+                        Score {Math.round(results.payload.score)}%
+                      </span>
+                    )}
+                    {results.payload.similarityScore !== undefined && (
+                      <span className="px-3 py-1 rounded-full bg-amber-100 text-amber-700">
+                        Similarity {results.payload.similarityScore}%
+                      </span>
+                    )}
+                    {results.payload.complexityEstimate && (
+                      <span className="px-3 py-1 rounded-full bg-indigo-100 text-indigo-700">
+                        {results.payload.complexityEstimate}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="space-y-3">
+                    {results.payload.tests?.map((test, index) => (
+                      <div
+                        key={`${test.input}-${index}`}
+                        className={`border rounded-lg p-3 ${test.passed ? 'border-emerald-200 bg-emerald-50' : 'border-red-200 bg-red-50'}`}
+                      >
+                        <div className="flex justify-between text-sm font-medium">
+                          <span>Test #{index + 1}</span>
+                          <span>{test.passed ? 'Passed' : 'Failed'}</span>
+                        </div>
+                        <div className="mt-2 text-xs text-slate-600">
+                          <div><strong>Input:</strong> {test.input}</div>
+                          <div><strong>Expected:</strong> {test.expectedOutput}</div>
+                          <div><strong>Output:</strong> {test.actualOutput}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {isSessionComplete && (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-6">
+                <h3 className="text-lg font-semibold text-emerald-900">Coding session complete</h3>
+                <p className="text-sm text-emerald-700 mt-2">
+                  You passed {completedCount} out of {problems.length} problems.
+                </p>
+                <button
+                  onClick={() => navigate('/dashboard')}
+                  className="mt-4 bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-semibold"
+                >
+                  Back to Dashboard
+                </button>
+              </div>
+            )}
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const InterviewSession = () => {
   const location = useLocation();
@@ -206,6 +545,10 @@ const InterviewSession = () => {
   }, [mode, timeLeft, totalTimeLeft]);
 
   const isInputLocked = showFeedback || loading || hasSubmittedCurrent || (mode !== 'review' && timeLeft === 0) || currentOptions.length === 0;
+
+  if (interview.mode === 'coding') {
+    return <CodingInterviewSession interview={interview} />;
+  }
 
   if (!hasInterview || !currentQuestion) {
     return null;

@@ -21,6 +21,7 @@ model User {
   // Relations
   resumes   Resume[]
   interviews Interview[]
+  codingSubmissions CodingSubmission[]
 
   @@map("users")
 }
@@ -103,4 +104,61 @@ model Answer {
   question    Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
 
   @@map("answers")
+}
+
+model CodingProblem {
+  id          Int      @id @default(autoincrement())
+  title       String
+  slug        String   @unique
+  difficulty  String
+  description String
+  timeLimitMs Int      @default(2000)
+  memoryLimitMb Int    @default(256)
+  supportedLanguages Json
+  starterCode Json
+  referenceSolutions Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  testCases   CodingTestCase[]
+  submissions CodingSubmission[]
+
+  @@map("coding_problems")
+}
+
+model CodingTestCase {
+  id          Int      @id @default(autoincrement())
+  problemId   Int
+  input       String
+  expectedOutput String
+  isHidden    Boolean  @default(false)
+  weight      Int      @default(1)
+  createdAt   DateTime @default(now())
+
+  problem     CodingProblem @relation(fields: [problemId], references: [id], onDelete: Cascade)
+
+  @@map("coding_test_cases")
+}
+
+model CodingSubmission {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  problemId   Int
+  language    String
+  sourceCode  String
+  status      String
+  runtimeMs   Int?
+  memoryMb    Int?
+  totalTests  Int
+  passedTests Int
+  score       Float
+  similarityScore Float?
+  complexityEstimate String?
+  executionLog Json?
+  createdAt   DateTime @default(now())
+
+  user        User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  problem     CodingProblem @relation(fields: [problemId], references: [id], onDelete: Cascade)
+
+  @@map("coding_submissions")
 }

@@ -7,6 +7,13 @@ const QUESTION_COUNT = 10;
 const SET_COUNT = 3;
 const COOLDOWN_HOURS = 0;
 const MAX_ADAPTIVE_SCORE_PER_QUESTION = 1.5;
+const CODING_QUESTION_COUNT = 5;
+
+const mapCodingDifficulty = (difficulty) => {
+  if (difficulty === 'beginner') return 'easy';
+  if (difficulty === 'intermediate') return 'medium';
+  return 'hard';
+};
 
 const getQuestionTimeLimitByDifficulty = (difficulty) => {
   if (difficulty === 'beginner') return 75;
@@ -47,9 +54,66 @@ const startInterview = async (req, res) => {
       return res.status(400).json({ error: 'Role and difficulty are required' });
     }
 
-    const allowedModes = new Set(['standard', 'timed', 'review', 'live']);
+    const allowedModes = new Set(['standard', 'timed', 'review', 'live', 'coding']);
     if (!allowedModes.has(mode)) {
       return res.status(400).json({ error: 'Invalid interview mode' });
+    }
+
+    if (mode === 'coding') {
+      const codingDifficulty = mapCodingDifficulty(difficulty);
+      const codingProblems = await prisma.codingProblem.findMany({
+        where: { difficulty: codingDifficulty },
+        orderBy: { id: 'asc' },
+        take: CODING_QUESTION_COUNT,
+        include: { testCases: { where: { isHidden: false } } }
+      });
+
+      if (codingProblems.length < CODING_QUESTION_COUNT) {
+        return res.status(400).json({
+          error: `Not enough coding problems for ${codingDifficulty}. Need ${CODING_QUESTION_COUNT} problems.`
+        });
+      }
+
+      const interview = await prisma.interview.create({
+        data: {
+          userId,
+          role,
+          difficulty,
+          requestedDifficulty: difficulty,
+          mode: 'coding',
+          totalTimeLimitSec: null,
+          questionTimeLimitSec: 0,
+          setIndex: 1,
+          setCount: 1,
+          shuffleEnabled: false,
+          adaptiveEnabled: false
+        }
+      });
+
+      return res.status(201).json({
+        interviewId: interview.id,
+        role,
+        difficulty,
+        requestedDifficulty: interview.requestedDifficulty,
+        mode: 'coding',
+        codingDifficulty,
+        totalProblems: CODING_QUESTION_COUNT,
+        codingProblems: codingProblems.map((problem) => ({
+          id: problem.id,
+          slug: problem.slug,
+          title: problem.title,
+          difficulty: problem.difficulty,
+          description: problem.description,
+          timeLimitMs: problem.timeLimitMs,
+          memoryLimitMb: problem.memoryLimitMb,
+          supportedLanguages: problem.supportedLanguages,
+          starterCode: problem.starterCode,
+          sampleTests: problem.testCases.map((testCase) => ({
+            input: testCase.input,
+            expectedOutput: testCase.expectedOutput
+          }))
+        }))
+      });
     }
 
     // Retake cooldown check
@@ -220,6 +284,10 @@ const getInterviewQuestions = async (req, res) => {
 
     if (interview.userId !== userId) {
       return res.status(403).json({ error: 'Unauthorized' });
+    }
+
+    if (interview.mode === 'coding') {
+      return res.status(400).json({ error: 'Coding interviews do not use MCQ results.' });
     }
 
     res.json({
