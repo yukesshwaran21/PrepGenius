@@ -16,7 +16,9 @@ const InterviewSession = () => {
   const [loading, setLoading] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
   const [timeLeft, setTimeLeft] = useState(interview?.questionTimeLimitSec || 60);
+  const [totalTimeLeft, setTotalTimeLeft] = useState(interview?.totalTimeLimitSec || 0);
   const [questionStartAt, setQuestionStartAt] = useState(new Date());
+  const [sessionQuestions, setSessionQuestions] = useState(interview?.questions || []);
 
   const autoNextRef = useRef(null);
 
@@ -33,12 +35,14 @@ const InterviewSession = () => {
   }, [interview, navigate]);
 
   const hasInterview = Boolean(interview);
-  const questions = interview?.questions || [];
+  const questions = sessionQuestions;
   const totalQuestions = questions.length;
   const safeQuestionIndex = Math.min(currentQuestionIndex, Math.max(totalQuestions - 1, 0));
   const currentQuestion = questions[safeQuestionIndex] || null;
   const progress = ((currentQuestionIndex + 1) / Math.max(totalQuestions, 1)) * 100;
   const questionTimeLimitSec = interview?.questionTimeLimitSec || 60;
+  const mode = interview?.mode || 'standard';
+  const totalTimeLimitSec = interview?.totalTimeLimitSec || questionTimeLimitSec * totalQuestions;
 
   const hasSubmittedCurrent = currentQuestion ? Boolean(submittedAnswers[currentQuestion.id]) : false;
   const feedback = currentQuestion ? (feedbackByQuestion[currentQuestion.id] || null) : null;
@@ -65,8 +69,12 @@ const InterviewSession = () => {
   ]);
 
   const getTimeSpentSeconds = () => {
-    const elapsed = questionTimeLimitSec - timeLeft;
-    return Math.max(0, Math.min(questionTimeLimitSec, elapsed));
+    const elapsed = Math.round((Date.now() - questionStartAt.getTime()) / 1000);
+    if (mode === 'standard' || mode === 'live') {
+      const capped = Math.min(questionTimeLimitSec, Math.max(0, elapsed));
+      return capped;
+    }
+    return Math.max(0, elapsed);
   };
 
   const moveToNextQuestion = () => {
@@ -126,9 +134,15 @@ const InterviewSession = () => {
 
       setShowFeedback(true);
 
-      autoNextRef.current = setTimeout(() => {
-        moveToNextQuestion();
-      }, AUTO_NEXT_DELAY_MS);
+      if (response.followUpQuestion) {
+        setSessionQuestions((prev) => [...prev, response.followUpQuestion]);
+      }
+
+      if (mode === 'standard' || mode === 'live' || mode === 'timed') {
+        autoNextRef.current = setTimeout(() => {
+          moveToNextQuestion();
+        }, AUTO_NEXT_DELAY_MS);
+      }
     } catch (err) {
       alert(err.response?.data?.error || 'Failed to submit answer');
     } finally {
@@ -141,7 +155,7 @@ const InterviewSession = () => {
       return;
     }
 
-    if (showFeedback || hasSubmittedCurrent || loading) {
+    if (showFeedback || hasSubmittedCurrent || loading || mode === 'review' || mode === 'timed') {
       return;
     }
 
@@ -157,13 +171,41 @@ const InterviewSession = () => {
     return () => clearInterval(timer);
   }, [hasInterview, currentQuestion, showFeedback, hasSubmittedCurrent, loading, timeLeft]);
 
-  const timerColorClass = useMemo(() => {
-    if (timeLeft <= 10) return 'text-red-600';
-    if (timeLeft <= 20) return 'text-yellow-600';
-    return 'text-emerald-600';
-  }, [timeLeft]);
+  useEffect(() => {
+    if (!hasInterview || mode !== 'timed') {
+      return;
+    }
 
-  const isInputLocked = showFeedback || loading || hasSubmittedCurrent || timeLeft === 0 || currentOptions.length === 0;
+    setTotalTimeLeft(totalTimeLimitSec);
+
+    const timer = setInterval(() => {
+      setTotalTimeLeft((prev) => Math.max(prev - 1, 0));
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [hasInterview, mode, totalTimeLimitSec]);
+
+  useEffect(() => {
+    if (!hasInterview || mode !== 'timed') {
+      return;
+    }
+
+    if (totalTimeLeft === 0) {
+      submitAnswer({ timedOut: true });
+      navigate('/interview-results', {
+        state: { interviewId: interview.interviewId }
+      });
+    }
+  }, [hasInterview, mode, totalTimeLeft]);
+
+  const timerColorClass = useMemo(() => {
+    const timeValue = mode === 'timed' ? totalTimeLeft : timeLeft;
+    if (timeValue <= 10) return 'text-red-600';
+    if (timeValue <= 20) return 'text-yellow-600';
+    return 'text-emerald-600';
+  }, [mode, timeLeft, totalTimeLeft]);
+
+  const isInputLocked = showFeedback || loading || hasSubmittedCurrent || (mode !== 'review' && timeLeft === 0) || currentOptions.length === 0;
 
   if (!hasInterview || !currentQuestion) {
     return null;
@@ -178,19 +220,28 @@ const InterviewSession = () => {
               <h1 className="text-3xl font-bold text-gray-900">Interview Simulation</h1>
               <p className="text-gray-600 mt-1">
                 {interview.role} • {interview.difficulty.toUpperCase()} • Set {interview.setIndex || 1}/{interview.setCount || 3}
+                <span className="ml-2 inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-700">
+                  {mode.toUpperCase()}
+                </span>
               </p>
             </div>
 
             <div className="bg-white rounded-lg border border-gray-200 px-5 py-3 text-right shadow-sm">
               <p className="text-xs text-gray-500">Time Left</p>
-              <p className={`text-3xl font-bold ${timerColorClass}`}>{timeLeft}s</p>
-              <p className="text-xs text-gray-500">Per question: {questionTimeLimitSec}s</p>
+              <p className={`text-3xl font-bold ${timerColorClass}`}>
+                {mode === 'timed' ? `${totalTimeLeft}s` : `${timeLeft}s`}
+              </p>
+              <p className="text-xs text-gray-500">
+                {mode === 'timed' ? `Total: ${totalTimeLimitSec}s` : `Per question: ${questionTimeLimitSec}s`}
+              </p>
             </div>
           </div>
 
           <div className="flex justify-between items-center mb-3">
             <p className="text-sm text-gray-600">Question {currentQuestionIndex + 1} of {totalQuestions}</p>
-            <p className="text-sm text-gray-600">Auto-advance enabled</p>
+            <p className="text-sm text-gray-600">
+              {mode === 'review' ? 'Review mode' : 'Auto-advance enabled'}
+            </p>
           </div>
 
           <div className="w-full bg-gray-300 rounded-full h-2">
@@ -202,13 +253,20 @@ const InterviewSession = () => {
         </div>
 
         <div className="bg-white rounded-lg shadow-lg p-8 mb-6">
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
             <h2 className="text-2xl font-bold text-gray-900">Question {currentQuestionIndex + 1}</h2>
-            {currentQuestion.difficultyTag && (
-              <span className="text-xs font-semibold uppercase tracking-wide px-3 py-1 rounded-full bg-indigo-100 text-indigo-700">
-                {currentQuestion.difficultyTag}
-              </span>
-            )}
+            <div className="flex items-center gap-2">
+              {currentQuestion.isFollowUp && (
+                <span className="text-xs font-semibold uppercase tracking-wide px-3 py-1 rounded-full bg-amber-100 text-amber-700">
+                  Follow-up
+                </span>
+              )}
+              {currentQuestion.difficultyTag && (
+                <span className="text-xs font-semibold uppercase tracking-wide px-3 py-1 rounded-full bg-indigo-100 text-indigo-700">
+                  {currentQuestion.difficultyTag}
+                </span>
+              )}
+            </div>
           </div>
           <p className="text-lg text-gray-700 mb-8 leading-relaxed">{currentQuestion.questionText}</p>
 
@@ -250,7 +308,12 @@ const InterviewSession = () => {
             <div className="mb-6 p-6 bg-blue-50 border-2 border-blue-200 rounded-lg">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-blue-900">AI Feedback</h3>
-                <div className="text-4xl font-bold text-blue-600">{feedback.score}/1</div>
+                <div className="text-right">
+                  <div className="text-3xl font-bold text-blue-600">{feedback.score}/1</div>
+                  {feedback.adaptiveScore !== undefined && feedback.adaptiveScore !== null && (
+                    <div className="text-sm text-blue-700">Adaptive: {feedback.adaptiveScore.toFixed(2)}</div>
+                  )}
+                </div>
               </div>
               <p className="text-gray-700 mb-3">{feedback.feedback}</p>
 
@@ -275,6 +338,31 @@ const InterviewSession = () => {
             </button>
           )}
         </div>
+
+        {mode === 'review' && (
+          <div className="flex items-center justify-between gap-3 mb-6">
+            <button
+              onClick={() => setCurrentQuestionIndex((prev) => Math.max(prev - 1, 0))}
+              disabled={currentQuestionIndex === 0}
+              className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 disabled:opacity-50"
+            >
+              Previous
+            </button>
+            <button
+              onClick={() => setCurrentQuestionIndex((prev) => Math.min(prev + 1, totalQuestions - 1))}
+              disabled={currentQuestionIndex >= totalQuestions - 1}
+              className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 disabled:opacity-50"
+            >
+              Next
+            </button>
+            <button
+              onClick={() => navigate('/interview-results', { state: { interviewId: interview.interviewId } })}
+              className="px-4 py-2 rounded-lg bg-indigo-600 text-white"
+            >
+              Finish Review
+            </button>
+          </div>
+        )}
 
         <div className="mt-8 bg-white rounded-lg shadow p-6">
           <h3 className="font-semibold text-gray-900 mb-3">Progress Tracker</h3>

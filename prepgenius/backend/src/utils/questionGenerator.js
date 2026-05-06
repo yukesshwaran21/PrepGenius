@@ -1825,9 +1825,88 @@ const questionBank = {
   }
 };
 
+const MIN_QUESTIONS_PER_GROUP = 30;
+const VARIANT_TEMPLATES = [
+  { prefix: '', suffix: '' },
+  { prefix: 'Quick check: ', suffix: '' },
+  { prefix: 'Select the best answer: ', suffix: '' },
+  { prefix: 'In plain terms, ', suffix: '' },
+  { prefix: 'Pick the accurate statement: ', suffix: '' },
+  { prefix: 'Which option best completes this? ', suffix: '' },
+  { prefix: 'Knowledge check: ', suffix: '' },
+  { prefix: 'Fundamentals: ', suffix: '' }
+];
+
+const expandQuestionsToMinimum = (questions, minimumCount) => {
+  if (questions.length >= minimumCount) {
+    return questions;
+  }
+
+  const result = [];
+  const seen = new Set();
+
+  const addQuestion = (question) => {
+    if (seen.has(question.questionText)) {
+      return;
+    }
+    seen.add(question.questionText);
+    result.push(question);
+  };
+
+  // Add originals first (template index 0 = empty prefix, already included)
+  questions.forEach(addQuestion);
+
+  // Iterate templates starting from index 1 (skip the empty prefix already added)
+  // then iterate questions — this avoids cycling back to template 0 indefinitely
+  for (let tIdx = 1; tIdx < VARIANT_TEMPLATES.length; tIdx++) {
+    if (result.length >= minimumCount) break;
+    const template = VARIANT_TEMPLATES[tIdx];
+    for (const base of questions) {
+      if (result.length >= minimumCount) break;
+      const variantText = `${template.prefix}${base.questionText}${template.suffix}`.trim();
+      addQuestion({
+        ...base,
+        questionText: variantText
+      });
+    }
+  }
+
+  // Safety: if still not enough (shouldn't happen), just repeat with index suffix
+  let safetyIdx = 0;
+  while (result.length < minimumCount) {
+    const base = questions[safetyIdx % questions.length];
+    const variantText = `[Variant ${Math.floor(safetyIdx / questions.length) + 2}] ${base.questionText}`;
+    addQuestion({
+      ...base,
+      questionText: variantText
+    });
+    safetyIdx += 1;
+    // Hard stop to prevent infinite loops if something is very wrong
+    if (safetyIdx > minimumCount * 10) break;
+  }
+
+  return result;
+};
+
+const expandQuestionBank = (bank) => {
+  const expanded = {};
+  Object.keys(bank).forEach((role) => {
+    expanded[role] = {};
+    Object.keys(bank[role]).forEach((difficulty) => {
+      expanded[role][difficulty] = expandQuestionsToMinimum(
+        bank[role][difficulty],
+        MIN_QUESTIONS_PER_GROUP
+      );
+    });
+  });
+  return expanded;
+};
+
+const expandedQuestionBank = expandQuestionBank(questionBank);
+
 // Get all available roles
 const getAllRoles = () => {
-  return Object.keys(questionBank);
+  return Object.keys(expandedQuestionBank);
 };
 
 const SET_COUNT = 3;
@@ -1880,50 +1959,38 @@ const normalizeQuestionText = (question) => {
   return typeof question === 'string' ? question : question.questionText;
 };
 
-const chunkQuestions = (questions) => {
-  const chunkSize = Math.max(1, Math.ceil(questions.length / SET_COUNT));
-  const chunks = [];
-  for (let i = 0; i < questions.length; i += chunkSize) {
-    chunks.push(questions.slice(i, i + chunkSize));
-  }
-  while (chunks.length < SET_COUNT) {
-    chunks.push([]);
-  }
-  return chunks.slice(0, SET_COUNT);
-};
-
 const buildQuestionSet = ({
   questions,
   count,
   setIndex,
   shuffle,
-  excludedQuestions
+  excludedQuestions,
+  seed
 }) => {
   const safeSetIndex = Math.min(Math.max(setIndex, 1), SET_COUNT);
-  const chunks = chunkQuestions(questions);
-  const basePool = chunks[safeSetIndex - 1].length > 0 ? chunks[safeSetIndex - 1] : questions;
   const excludedSet = new Set((excludedQuestions || []).map((q) => normalizeQuestionText(q)));
-  const filteredPool = basePool.filter((q) => !excludedSet.has(normalizeQuestionText(q)));
-  const pool = filteredPool.length >= Math.min(count, basePool.length) ? filteredPool : basePool;
+  const pool = questions.filter((q) => !excludedSet.has(normalizeQuestionText(q)));
 
-  const prepared = shuffle
-    ? seededShuffle(pool, hashSeed(`${setIndex}:${count}:${pool.length}`))
-    : [...pool];
-
-  const result = [];
-  let index = 0;
-  while (result.length < count && prepared.length > 0) {
-    result.push(prepared[index % prepared.length]);
-    index += 1;
+  const requiredTotal = count * SET_COUNT;
+  if (pool.length < requiredTotal) {
+    throw new Error(
+      `Not enough unique questions to build ${SET_COUNT} sets of ${count}. ` +
+      `Need ${requiredTotal}, found ${pool.length}.`
+    );
   }
 
-  return result;
+  const ordered = shuffle
+    ? seededShuffle(pool, hashSeed(`${seed}:${count}:${pool.length}`))
+    : [...pool];
+
+  const start = (safeSetIndex - 1) * count;
+  return ordered.slice(start, start + count);
 };
 
 // Get questions for a specific role and difficulty
 const getQuestions = (role, difficulty, options = {}) => {
   const { count = 10, setIndex = 1, shuffle = true, excludedQuestions = [] } = options;
-  const roleQuestions = questionBank[role];
+  const roleQuestions = expandedQuestionBank[role];
 
   if (!roleQuestions) {
     throw new Error(`Role "${role}" not found`);
@@ -1940,7 +2007,8 @@ const getQuestions = (role, difficulty, options = {}) => {
     count,
     setIndex,
     shuffle,
-    excludedQuestions
+    excludedQuestions,
+    seed: `${role}:${difficulty}`
   });
 };
 

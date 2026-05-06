@@ -5,7 +5,8 @@ const prisma = new PrismaClient();
 
 const QUESTION_COUNT = 10;
 const SET_COUNT = 3;
-const COOLDOWN_HOURS = Number(process.env.INTERVIEW_RETAKE_COOLDOWN_HOURS || 4);
+const COOLDOWN_HOURS = 0;
+const MAX_ADAPTIVE_SCORE_PER_QUESTION = 1.5;
 
 const getQuestionTimeLimitByDifficulty = (difficulty) => {
   if (difficulty === 'beginner') return 75;
@@ -33,11 +34,22 @@ const bumpDifficulty = (difficulty) => {
 // Start a new interview session
 const startInterview = async (req, res) => {
   try {
-    const { role, difficulty, shuffleQuestions = true, adaptiveMix = true } = req.body;
+    const {
+      role,
+      difficulty,
+      shuffleQuestions = true,
+      adaptiveMix = true,
+      mode = 'standard'
+    } = req.body;
     const userId = req.userId; // From auth middleware
 
     if (!role || !difficulty) {
       return res.status(400).json({ error: 'Role and difficulty are required' });
+    }
+
+    const allowedModes = new Set(['standard', 'timed', 'review', 'live']);
+    if (!allowedModes.has(mode)) {
+      return res.status(400).json({ error: 'Invalid interview mode' });
     }
 
     // Retake cooldown check
@@ -85,6 +97,7 @@ const startInterview = async (req, res) => {
     console.log(`🎤 Starting interview for user ${userId}: ${role} (${effectiveDifficulty})`);
 
     const questionTimeLimitSec = getQuestionTimeLimitByDifficulty(effectiveDifficulty);
+    const totalTimeLimitSec = mode === 'timed' ? questionTimeLimitSec * QUESTION_COUNT : null;
 
     const lastSetInterview = await prisma.interview.findFirst({
       where: { userId, role, difficulty: effectiveDifficulty },
@@ -113,6 +126,8 @@ const startInterview = async (req, res) => {
         role,
         difficulty: effectiveDifficulty,
         requestedDifficulty,
+        mode,
+        totalTimeLimitSec,
         questionTimeLimitSec,
         setIndex,
         setCount: SET_COUNT,
@@ -158,6 +173,8 @@ const startInterview = async (req, res) => {
       role,
       difficulty: effectiveDifficulty,
       requestedDifficulty,
+      mode,
+      totalTimeLimitSec,
       setIndex,
       setCount: SET_COUNT,
       shuffleEnabled: Boolean(shuffleQuestions),
@@ -168,7 +185,9 @@ const startInterview = async (req, res) => {
         id: question.id,
         questionText: question.questionText,
         options: question.options || [],
-        difficultyTag: question.difficultyTag || null
+        difficultyTag: question.difficultyTag || null,
+        isFollowUp: question.isFollowUp || false,
+        parentQuestionId: question.parentQuestionId || null
       }))
     });
   } catch (error) {
@@ -208,6 +227,8 @@ const getInterviewQuestions = async (req, res) => {
       role: interview.role,
       difficulty: interview.difficulty,
       requestedDifficulty: interview.requestedDifficulty || interview.difficulty,
+      mode: interview.mode || 'standard',
+      totalTimeLimitSec: interview.totalTimeLimitSec || null,
       setIndex: interview.setIndex || 1,
       setCount: interview.setCount || 3,
       shuffleEnabled: interview.shuffleEnabled ?? true,
@@ -218,6 +239,8 @@ const getInterviewQuestions = async (req, res) => {
         questionText: q.questionText,
         options: q.options || [],
         difficultyTag: q.difficultyTag || null,
+        isFollowUp: q.isFollowUp || false,
+        parentQuestionId: q.parentQuestionId || null,
         answered: q.answers.length > 0,
         answer: q.answers[0]?.userAnswer || null,
         feedback: q.answers[0]?.aiFeedback || null,
@@ -284,14 +307,42 @@ const submitAnswer = async (req, res) => {
     const answerToEvaluate = normalizedAnswer || 'No response submitted before timeout.';
     const correctOptionId = (question.correctOptionId || '').toUpperCase();
     const isCorrect = Boolean(correctOptionId && selectedOptionId && correctOptionId === selectedOptionId);
-    const score = isCorrect ? 1 : 0;
+    const baseScore = isCorrect ? 1 : 0;
+
+    const questionTimeLimitSec = Number(question.interview.questionTimeLimitSec || 0);
+    const timeRatio = questionTimeLimitSec > 0 && Number.isFinite(parsedTimeSpent)
+      ? parsedTimeSpent / questionTimeLimitSec
+      : null;
+    const timeBonus = isCorrect
+      ? (timeRatio !== null && timeRatio <= 0.5 ? 0.25 : timeRatio !== null && timeRatio <= 0.75 ? 0.1 : 0)
+      : 0;
+    const partialCredit = !isCorrect && !isTimedOut && !isAutoSubmitted && selectedOptionId ? 0.25 : 0;
+
+    const lastAnswer = await prisma.answer.findFirst({
+      where: {
+        question: {
+          interviewId: question.interviewId
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    const lastStreak = lastAnswer && lastAnswer.score === 1 ? (lastAnswer.streakCount || 0) : 0;
+    const streakCount = isCorrect ? lastStreak + 1 : 0;
+    const streakBonus = isCorrect ? Math.min(0.3, Math.max(0, (streakCount - 1) * 0.1)) : 0;
+
+    const adaptiveScore = Math.min(
+      MAX_ADAPTIVE_SCORE_PER_QUESTION,
+      baseScore + partialCredit + timeBonus + streakBonus
+    );
+
     const feedback = isTimedOut
       ? 'No response submitted before timeout.'
       : isCorrect
       ? 'Correct answer.'
       : `Incorrect answer. Correct option: ${correctOptionId || 'N/A'}.`;
 
-    console.log(`📝 Answer submitted for question ${questionId}, score: ${score}`);
+    console.log(`📝 Answer submitted for question ${questionId}, score: ${baseScore}`);
 
     // Delete existing answer if any
     if (question.answers.length > 0) {
@@ -300,13 +351,26 @@ const submitAnswer = async (req, res) => {
       });
     }
 
+    const scoreBreakdown = {
+      baseScore,
+      partialCredit,
+      timeBonus,
+      streakBonus,
+      adaptiveScore,
+      streakCount,
+      maxScore: MAX_ADAPTIVE_SCORE_PER_QUESTION
+    };
+
     // Save answer
     const answer = await prisma.answer.create({
       data: {
         questionId: parseInt(questionId),
         userAnswer: answerToEvaluate,
         aiFeedback: feedback,
-        score,
+        score: baseScore,
+        adaptiveScore,
+        scoreBreakdown,
+        streakCount,
         answerStartedAt: answerStartedAt ? new Date(answerStartedAt) : null,
         answerSubmittedAt: answerSubmittedAt ? new Date(answerSubmittedAt) : new Date(),
         timeSpentSeconds: Number.isFinite(parsedTimeSpent) ? Math.max(0, Math.round(parsedTimeSpent)) : null,
@@ -315,13 +379,49 @@ const submitAnswer = async (req, res) => {
       }
     });
 
+    let followUpQuestion = null;
+    if (question.interview.mode === 'live' && !isCorrect && !question.isFollowUp) {
+      const existingFollowUp = await prisma.question.findFirst({
+        where: {
+          parentQuestionId: question.id
+        }
+      });
+
+      if (!existingFollowUp) {
+        const followUp = await prisma.question.create({
+          data: {
+            interviewId: question.interviewId,
+            questionText: `Follow-up: ${question.questionText}`,
+            options: question.options || [],
+            correctOptionId: question.correctOptionId,
+            explanation: question.explanation || null,
+            difficultyTag: question.difficultyTag || null,
+            isFollowUp: true,
+            parentQuestionId: question.id
+          }
+        });
+
+        followUpQuestion = {
+          id: followUp.id,
+          questionText: followUp.questionText,
+          options: followUp.options || [],
+          difficultyTag: followUp.difficultyTag || null,
+          isFollowUp: true,
+          parentQuestionId: followUp.parentQuestionId
+        };
+      }
+    }
+
     res.status(201).json({
       answerId: answer.id,
-      score,
+      score: baseScore,
+      adaptiveScore,
+      scoreBreakdown,
       feedback,
       isCorrect,
       correctOptionId: correctOptionId || null,
       selectedOptionId: selectedOptionId || null,
+      followUpQuestion,
       timedOut: answer.timedOut,
       autoSubmitted: answer.autoSubmitted,
       timeSpentSeconds: answer.timeSpentSeconds
@@ -364,8 +464,15 @@ const getInterviewResults = async (req, res) => {
     const scores = interview.questions
       .filter(q => q.answers.length > 0 && q.answers[0].score !== null)
       .map(q => q.answers[0].score);
+    const adaptiveScores = interview.questions
+      .filter(q => q.answers.length > 0 && q.answers[0].adaptiveScore !== null)
+      .map(q => q.answers[0].adaptiveScore);
     const totalMarks = scores.reduce((a, b) => a + b, 0);
     const averageScore = totalQuestions > 0 ? Math.round((totalMarks / totalQuestions) * 100) : 0;
+    const totalAdaptiveScore = adaptiveScores.reduce((a, b) => a + b, 0);
+    const averageAdaptiveScore = totalQuestions > 0
+      ? Math.round((totalAdaptiveScore / totalQuestions) * 100) / 100
+      : 0;
     const maxScore = scores.length > 0 ? Math.max(...scores) : 0;
     const minScore = scores.length > 0 ? Math.min(...scores) : 0;
     const timedOutCount = interview.questions.filter(q => q.answers[0]?.timedOut).length;
@@ -385,11 +492,32 @@ const getInterviewResults = async (req, res) => {
 
     console.log(`✅ Interview ${interviewId} completed: ${averageScore}/100`);
 
+    const perSkillBreakdown = interview.questions.reduce((acc, q) => {
+      const tag = q.difficultyTag || 'general';
+      if (!acc[tag]) {
+        acc[tag] = { total: 0, correct: 0, adaptiveTotal: 0 };
+      }
+      acc[tag].total += 1;
+      acc[tag].correct += q.answers[0]?.score === 1 ? 1 : 0;
+      acc[tag].adaptiveTotal += q.answers[0]?.adaptiveScore || 0;
+      return acc;
+    }, {});
+
+    const perSkillSummary = Object.entries(perSkillBreakdown).map(([tag, data]) => ({
+      tag,
+      total: data.total,
+      correct: data.correct,
+      accuracy: data.total > 0 ? Math.round((data.correct / data.total) * 100) : 0,
+      adaptiveAverage: data.total > 0 ? Math.round((data.adaptiveTotal / data.total) * 100) / 100 : 0
+    }));
+
     res.json({
       interviewId: interview.id,
       role: interview.role,
       difficulty: interview.difficulty,
       requestedDifficulty: interview.requestedDifficulty || interview.difficulty,
+      mode: interview.mode || 'standard',
+      totalTimeLimitSec: interview.totalTimeLimitSec || null,
       setIndex: interview.setIndex || 1,
       setCount: interview.setCount || 3,
       shuffleEnabled: interview.shuffleEnabled ?? true,
@@ -400,12 +528,15 @@ const getInterviewResults = async (req, res) => {
         totalQuestions,
         answeredQuestions,
         totalMarks,
+        totalAdaptiveScore,
         averageScore,
+        averageAdaptiveScore,
         maxScore,
         minScore,
         timedOutCount,
         averageTimeSpentSeconds,
-        performanceTier
+        performanceTier,
+        perSkillSummary
       },
       detailedResults: interview.questions.map(q => ({
         id: q.id,
@@ -414,10 +545,14 @@ const getInterviewResults = async (req, res) => {
         correctOptionId: q.correctOptionId || null,
         explanation: q.explanation || null,
         difficultyTag: q.difficultyTag || null,
+        isFollowUp: q.isFollowUp || false,
+        parentQuestionId: q.parentQuestionId || null,
         userAnswer: q.answers[0]?.userAnswer || null,
         feedback: q.answers[0]?.aiFeedback || null,
         score: q.answers[0]?.score || null,
         isCorrect: q.answers[0]?.score === 1,
+        adaptiveScore: q.answers[0]?.adaptiveScore || null,
+        scoreBreakdown: q.answers[0]?.scoreBreakdown || null,
         answered: q.answers.length > 0,
         timedOut: q.answers[0]?.timedOut || false,
         autoSubmitted: q.answers[0]?.autoSubmitted || false,

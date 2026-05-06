@@ -2,11 +2,39 @@ const { PrismaClient } = require('@prisma/client');
 const fs = require('fs');
 const path = require('path');
 const { extractTextFromResumeFile } = require('../utils/openai');
-const { analyzeResumeLocal } = require('../utils/localAnalyzer');
+const { analyzeResumeLocal, RUBRIC } = require('../utils/localAnalyzer');
 const { ATS_TEMPLATES } = require('../utils/resumeTemplates');
 const { scoreResumeWithModel } = require('../utils/modelScorer');
 
 const prisma = new PrismaClient();
+
+const removeUploadedFile = (file) => {
+  if (!file?.path) {
+    return;
+  }
+  try {
+    if (fs.existsSync(file.path)) {
+      fs.unlinkSync(file.path);
+    }
+  } catch (err) {
+    console.error('Error deleting file:', err);
+  }
+};
+
+const buildMatchResponse = (analysis) => {
+  const keywordScore = analysis?.sectionBreakdown?.keywordAlignment?.score || 0;
+  const missingKeywords = analysis?.sectionBreakdown?.keywordAlignment?.missingKeywords || [];
+  const matchScore = RUBRIC.keywordAlignment > 0
+    ? Math.round((keywordScore / RUBRIC.keywordAlignment) * 100)
+    : 0;
+
+  return {
+    match_score: matchScore,
+    missing_keywords: missingKeywords,
+    important_keywords_absent: missingKeywords,
+    ats_compatibility: analysis?.overallScore || 0
+  };
+};
 
 // UPLOAD RESUME AND ANALYZE
 const uploadResume = async (req, res) => {
@@ -102,6 +130,74 @@ const analyzeResumeText = async (req, res) => {
   } catch (error) {
     console.error('Analyze resume text error:', error);
     res.status(500).json({ error: 'Failed to analyze resume text' });
+  }
+};
+
+// MATCH RESUME AGAINST JOB DESCRIPTION (TEXT INPUT)
+const matchResumeToJobDescriptionText = async (req, res) => {
+  try {
+    const { resumeText, jobDescription } = req.body;
+
+    if (!resumeText || typeof resumeText !== 'string' || resumeText.trim().length < 50) {
+      return res.status(400).json({ error: 'resumeText is required and should be at least 50 characters' });
+    }
+
+    if (!jobDescription || typeof jobDescription !== 'string' || jobDescription.trim().length < 30) {
+      return res.status(400).json({ error: 'jobDescription is required and should be at least 30 characters' });
+    }
+
+    const analysis = analyzeResumeLocal(resumeText, { jdHints: jobDescription });
+    const match = buildMatchResponse(analysis);
+
+    res.status(200).json({
+      match,
+      ats_breakdown: analysis.sectionBreakdown
+    });
+  } catch (error) {
+    console.error('Match resume text error:', error);
+    res.status(500).json({ error: 'Failed to match resume to job description' });
+  }
+};
+
+// MATCH RESUME AGAINST JOB DESCRIPTION (FILE UPLOAD)
+const matchResumeToJobDescriptionUpload = async (req, res) => {
+  const resumeFile = req.files?.resume?.[0] || null;
+  const jdFile = req.files?.jobDescription?.[0] || null;
+
+  try {
+    const jdText = req.body?.jobDescriptionText || '';
+
+    if (!resumeFile) {
+      return res.status(400).json({ error: 'Resume file is required' });
+    }
+
+    const resumeText = await extractTextFromResumeFile(resumeFile.path);
+    if (!resumeText || resumeText.trim().length < 50) {
+      return res.status(400).json({ error: 'Could not extract sufficient text from resume file' });
+    }
+
+    let jobDescription = jdText;
+    if (jdFile) {
+      jobDescription = await extractTextFromResumeFile(jdFile.path);
+    }
+
+    if (!jobDescription || jobDescription.trim().length < 30) {
+      return res.status(400).json({ error: 'Job description text or file is required' });
+    }
+
+    const analysis = analyzeResumeLocal(resumeText, { jdHints: jobDescription });
+    const match = buildMatchResponse(analysis);
+
+    res.status(200).json({
+      match,
+      ats_breakdown: analysis.sectionBreakdown
+    });
+  } catch (error) {
+    console.error('Match resume upload error:', error);
+    res.status(500).json({ error: 'Failed to match resume to job description' });
+  } finally {
+    removeUploadedFile(resumeFile);
+    removeUploadedFile(jdFile);
   }
 };
 
@@ -217,6 +313,8 @@ const deleteResume = async (req, res) => {
 module.exports = {
   uploadResume,
   analyzeResumeText,
+  matchResumeToJobDescriptionText,
+  matchResumeToJobDescriptionUpload,
   getAtsTemplates,
   getResumeAnalysis,
   getAllResumes,

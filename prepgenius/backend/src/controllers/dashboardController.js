@@ -2,6 +2,14 @@ const { PrismaClient } = require('@prisma/client');
 
 const prisma = new PrismaClient();
 
+const normalizePercentScore = (rawScore) => {
+  if (!Number.isFinite(rawScore)) {
+    return 0;
+  }
+  const normalized = rawScore > 1.5 ? rawScore : rawScore * 100;
+  return Math.round(Math.max(0, Math.min(100, normalized)));
+};
+
 // GET USER STATS & PROFILE INFO
 const getUserStats = async (req, res) => {
   try {
@@ -47,7 +55,7 @@ const getUserStats = async (req, res) => {
       }
     });
 
-    const averageScore = (averageScoreResult._avg.score || 0) * 100;
+    const averageScore = normalizePercentScore(averageScoreResult._avg.score || 0);
 
     res.status(200).json({
       user: {
@@ -59,7 +67,7 @@ const getUserStats = async (req, res) => {
         resumesUploaded: resumeCount,
         interviewsTaken: interviewCount,
         answersSubmitted: answerCount,
-        averageScore: Math.round(averageScore)
+        averageScore
       }
     });
   } catch (error) {
@@ -96,12 +104,12 @@ const getRecentInterviews = async (req, res) => {
       );
       const totalMarks = interview.questions.reduce((sum, q) => {
         const qScore = q.answers.length > 0
-          ? Math.round(q.answers.reduce((s, a) => s + (a.score || 0), 0) / q.answers.length)
+          ? q.answers.reduce((s, a) => s + (a.score || 0), 0) / q.answers.length
           : 0;
-        return sum + qScore;
+        return sum + normalizePercentScore(qScore);
       }, 0);
       const averageScore = totalQuestions > 0
-        ? Math.round((totalMarks / totalQuestions) * 100)
+        ? Math.round(totalMarks / totalQuestions)
         : 0;
 
       return {

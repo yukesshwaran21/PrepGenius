@@ -2,26 +2,28 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { interviewAPI } from '../services/api';
 
+const ROLES = [
+  'React Developer',
+  'Angular Developer',
+  'Vue Developer',
+  'Java Developer',
+  'Python Developer',
+  'Node.js Developer',
+  'Full Stack Developer',
+  'DevOps Engineer'
+];
+
+const DIFFICULTIES = [
+  { value: 'beginner', label: 'low', emoji: '🌱' },
+  { value: 'intermediate', label: 'medium', emoji: '🚀' },
+  { value: 'advanced', label: 'hard', emoji: '⚡' }
+];
+
 const InterviewSetup = () => {
   const navigate = useNavigate();
-  const [roles] = useState([
-    'React Developer',
-    'Angular Developer',
-    'Vue Developer',
-    'Java Developer',
-    'Python Developer',
-    'Node.js Developer',
-    'Full Stack Developer',
-    'DevOps Engineer'
-  ]);
-  
-  const [difficulties] = useState([
-    { value: 'beginner', label: 'low', emoji: '🌱' },
-    { value: 'intermediate', label: 'medium', emoji: '🚀' },
-    { value: 'advanced', label: 'hard', emoji: '⚡' }
-  ]);
-  const [selectedRole, setSelectedRole] = useState('');
+  const [selectedRole, setSelectedRole] = useState(ROLES[0]);
   const [selectedDifficulty, setSelectedDifficulty] = useState('beginner');
+  const [selectedMode, setSelectedMode] = useState('standard');
   const [shuffleQuestions, setShuffleQuestions] = useState(true);
   const [adaptiveMix, setAdaptiveMix] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -39,7 +41,8 @@ const InterviewSetup = () => {
     try {
       const response = await interviewAPI.startInterview(selectedRole, selectedDifficulty, {
         shuffleQuestions,
-        adaptiveMix
+        adaptiveMix,
+        mode: selectedMode
       });
       // Navigate to interview session with interview data
       navigate('/interview-session', { state: { interview: response } });
@@ -73,7 +76,7 @@ const InterviewSetup = () => {
               Select Your Role
             </label>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {roles.map(role => (
+              {ROLES.map(role => (
                 <button
                   key={role}
                   onClick={() => setSelectedRole(role)}
@@ -95,7 +98,7 @@ const InterviewSetup = () => {
               Select Difficulty Level
             </label>
             <div className="grid grid-cols-3 gap-3">
-              {difficulties.map(difficulty => (
+              {DIFFICULTIES.map(difficulty => (
                 <button
                   key={difficulty.value}
                   onClick={() => setSelectedDifficulty(difficulty.value)}
@@ -120,6 +123,46 @@ const InterviewSetup = () => {
             <label className="block text-lg font-semibold text-gray-800 mb-4">
               Session Options
             </label>
+            <div className="mb-6">
+              <label className="block text-sm font-semibold text-gray-700 mb-3">Interview Mode</label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {[
+                  {
+                    value: 'standard',
+                    title: 'Standard',
+                    description: 'Timed per question, auto-advance.'
+                  },
+                  {
+                    value: 'timed',
+                    title: 'Timed Quiz',
+                    description: 'Single countdown for the full interview.'
+                  },
+                  {
+                    value: 'review',
+                    title: 'Review Mode',
+                    description: 'No timers, manual navigation.'
+                  },
+                  {
+                    value: 'live',
+                    title: 'Live Interviewer',
+                    description: 'Follow-up questions on incorrect answers.'
+                  }
+                ].map((mode) => (
+                  <button
+                    key={mode.value}
+                    onClick={() => setSelectedMode(mode.value)}
+                    className={`p-4 text-left rounded-lg border-2 transition ${
+                      selectedMode === mode.value
+                        ? 'border-indigo-500 bg-indigo-50'
+                        : 'border-gray-200 bg-white hover:border-gray-300'
+                    }`}
+                  >
+                    <p className="font-semibold text-gray-900">{mode.title}</p>
+                    <p className="text-sm text-gray-600 mt-1">{mode.description}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="space-y-3">
               <label className="flex items-center gap-3 text-gray-700">
                 <input

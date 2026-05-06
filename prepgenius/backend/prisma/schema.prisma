@@ -45,6 +45,8 @@ model Interview {
   role        String  // e.g., "Java Developer", "React Developer"
   difficulty  String  // e.g., "beginner", "intermediate", "advanced"
   requestedDifficulty String? // Original user-selected difficulty
+  mode        String  @default("standard")
+  totalTimeLimitSec Int?
   setIndex    Int     @default(1)
   setCount    Int     @default(3)
   shuffleEnabled Boolean @default(true)
@@ -68,10 +70,14 @@ model Question {
   correctOptionId String?
   explanation String?
   difficultyTag String?
+  isFollowUp Boolean @default(false)
+  parentQuestionId Int?
   createdAt   DateTime @default(now())
 
   // Relations
   interview   Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+  parentQuestion Question? @relation("QuestionFollowUps", fields: [parentQuestionId], references: [id], onDelete: Cascade)
+  followUps   Question[] @relation("QuestionFollowUps")
   answers     Answer[]
 
   @@map("questions")
@@ -82,7 +88,7 @@ model Answer {
   questionId  Int
   userAnswer  String
   aiFeedback  String?
-  score       Int?    // 0-100
+  score       Int?    // 0-1 mark
   adaptiveScore Float?
   scoreBreakdown Json?
   streakCount Int? @default(0)

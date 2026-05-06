@@ -66,6 +66,7 @@ const InterviewResults = () => {
     role,
     difficulty,
     requestedDifficulty,
+    mode,
     setIndex,
     setCount,
     createdAt,
@@ -102,6 +103,7 @@ const InterviewResults = () => {
               <span> • Requested: {displayRequested}</span>
             )}
             <span> • Set {setIndex || 1}/{setCount || 3}</span>
+            {mode && <span> • Mode: {mode}</span>}
           </p>
         </div>
 
@@ -115,7 +117,7 @@ const InterviewResults = () => {
             <p className="text-2xl font-semibold mb-8">{summary.performanceTier}</p>
             
             {/* Stats Grid */}
-            <div className="grid grid-cols-3 gap-6 text-sm">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-sm">
               <div>
                 <p className="opacity-90">Questions Answered</p>
                 <p className="text-3xl font-bold">{summary.answeredQuestions}/{summary.totalQuestions}</p>
@@ -127,6 +129,10 @@ const InterviewResults = () => {
               <div>
                 <p className="opacity-90">Correct Answers</p>
                 <p className="text-3xl font-bold">{summary.totalMarks}</p>
+              </div>
+              <div>
+                <p className="opacity-90">Adaptive Avg</p>
+                <p className="text-3xl font-bold">{summary.averageAdaptiveScore}</p>
               </div>
             </div>
           </div>
@@ -161,6 +167,28 @@ const InterviewResults = () => {
           </div>
         </div>
 
+        {summary.perSkillSummary && summary.perSkillSummary.length > 0 && (
+          <div className="bg-white rounded-lg shadow-lg p-8 mb-8">
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">🧭 Skill Breakdown</h2>
+            <div className="grid gap-4">
+              {summary.perSkillSummary.map((skill) => (
+                <div key={skill.tag} className="border border-gray-200 rounded-lg p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-gray-900">{skill.tag}</p>
+                    <p className="text-sm text-gray-600">{skill.correct}/{skill.total} correct</p>
+                  </div>
+                  <div className="text-sm text-gray-700">
+                    Accuracy: <span className="font-semibold">{skill.accuracy}%</span>
+                  </div>
+                  <div className="text-sm text-gray-700">
+                    Adaptive Avg: <span className="font-semibold">{skill.adaptiveAverage}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Detailed Results */}
         <div className="bg-white rounded-lg shadow-lg p-8 mb-8">
           <h2 className="text-2xl font-bold text-gray-900 mb-6">📋 Question Breakdown</h2>
@@ -181,7 +209,12 @@ const InterviewResults = () => {
                         }
                       </span>
                       <div>
-                        <p className="font-semibold text-gray-900 text-left">Q{idx + 1}: {result.questionText}</p>
+                        <p className="font-semibold text-gray-900 text-left">
+                          Q{idx + 1}: {result.questionText}
+                          {result.isFollowUp && (
+                            <span className="ml-2 text-xs font-semibold uppercase tracking-wide text-amber-700">Follow-up</span>
+                          )}
+                        </p>
                         {result.answered && (
                           <p className="text-sm text-gray-600 mt-1">
                             Score: <span className="font-bold">{result.score}/1</span>

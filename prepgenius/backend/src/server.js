@@ -35,8 +35,13 @@ app.use((err, req, res, next) => {
 });
 
 // Start server
-app.listen(PORT, () => {
+console.log(`Starting backend from ${process.cwd()}`);
+const server = app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
+});
+
+server.on('error', (err) => {
+  console.error('❌ Server failed to start:', err.message);
 });
 
 module.exports = app;
