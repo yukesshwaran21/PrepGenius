@@ -1,6 +1,32 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authAPI, dashboardAPI } from '../services/api';
+import Navbar from '../components/Navbar';
+import StatCard from '../components/StatCard';
+import Badge from '../components/Badge';
+
+const ActionCard = ({ title, description, icon, gradient, buttonLabel, onClick, delay = 0 }) => (
+  <div
+    className="relative rounded-2xl p-6 overflow-hidden cursor-pointer group animate-slide-up hover:-translate-y-1 transition-all duration-300"
+    style={{ background: gradient, animationDelay: `${delay}ms`, boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}
+    onClick={onClick}
+  >
+    <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity"
+      style={{ background: 'rgba(255,255,255,0.05)' }} />
+    <div className="flex items-start justify-between mb-4">
+      <div>
+        <h4 className="text-xl font-bold text-white mb-1">{title}</h4>
+        <p className="text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>{description}</p>
+      </div>
+      <div className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl ml-4"
+        style={{ background: 'rgba(255,255,255,0.15)' }}>{icon}</div>
+    </div>
+    <button className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold group-hover:gap-3 transition-all"
+      style={{ background: 'rgba(255,255,255,0.2)', color: 'white' }}>
+      {buttonLabel} <span className="transition-transform group-hover:translate-x-1">→</span>
+    </button>
+  </div>
+);
 
 const Dashboard = () => {
   const [user, setUser] = useState(null);
@@ -11,31 +37,23 @@ const Dashboard = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const fetchDashboardData = async () => {
+    const fetch = async () => {
       try {
-        // Fetch user profile
         const profileRes = await authAPI.getProfile();
         setUser(profileRes.data.user);
-
-        // Fetch stats
         const statsRes = await dashboardAPI.getStats();
         setStats(statsRes.data.stats);
-
-        // Fetch recent interviews
-        const interviewsRes = await dashboardAPI.getRecentInterviews(5);
-        setRecentInterviews(interviewsRes.data.interviews);
-
-        // Fetch recent resumes
-        const resumesRes = await dashboardAPI.getRecentResumes(5);
-        setRecentResumes(resumesRes.data.resumes);
-      } catch (error) {
-        console.error('Failed to fetch dashboard data:', error);
+        const ivRes = await dashboardAPI.getRecentInterviews(5);
+        setRecentInterviews(ivRes.data.interviews);
+        const rRes = await dashboardAPI.getRecentResumes(5);
+        setRecentResumes(rRes.data.resumes);
+      } catch (err) {
+        console.error(err);
       } finally {
         setLoading(false);
       }
     };
-
-    fetchDashboardData();
+    fetch();
   }, []);
 
   const handleLogout = () => {
@@ -46,246 +64,141 @@ const Dashboard = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-100">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading your dashboard...</p>
+      <div className="min-h-screen flex items-center justify-center" style={{ background: '#0a0a12' }}>
+        <div className="text-center animate-fade-in">
+          <div className="w-12 h-12 rounded-full border-2 border-violet-500 border-t-transparent animate-spin mx-auto mb-4" />
+          <p style={{ color: '#a1a1b5' }}>Loading dashboard...</p>
         </div>
       </div>
     );
   }
 
+  const scoreBadge = (s) => s >= 80 ? 'success' : s >= 60 ? 'info' : s >= 40 ? 'warning' : 'danger';
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      {/* Navigation Bar */}
-      <nav className="bg-white shadow-sm sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold text-blue-600">PrepGenius</h1>
-            <p className="text-xs text-gray-500">AI-Powered Interview Preparation</p>
+    <div className="min-h-screen" style={{ background: '#0a0a12' }}>
+      <Navbar user={user} onLogout={handleLogout} />
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+        {/* Welcome */}
+        <div className="mb-8 animate-slide-up">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-xs font-medium" style={{ color: '#a1a1b5' }}>Active Session</span>
           </div>
-          <div className="flex items-center gap-6">
-            <div className="hidden md:block">
-              <p className="text-sm font-medium text-gray-800">{user?.name}</p>
-              <p className="text-xs text-gray-500">{user?.email}</p>
-            </div>
-            <button
-              onClick={() => navigate('/profile')}
-              className="bg-blue-100 text-blue-700 px-4 py-2 rounded-lg hover:bg-blue-200 transition font-medium"
-            >
-              Profile
-            </button>
-            <button
-              onClick={handleLogout}
-              className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition font-medium"
-            >
-              Logout
-            </button>
-          </div>
-        </div>
-      </nav>
-
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-6 py-12">
-        {/* Welcome Section */}
-        <div className="mb-12">
-          <h2 className="text-4xl font-bold text-gray-800 mb-2">
-            Welcome back, {user?.name?.split(' ')[0]}! 👋
+          <h2 className="text-4xl font-bold text-white mb-2">
+            Welcome back, <span className="gradient-text">{user?.name?.split(' ')[0] || 'there'}</span> 👋
           </h2>
-          <p className="text-gray-600">
-            Here's your interview preparation progress. Keep practicing to improve your skills!
-          </p>
+          <p style={{ color: '#a1a1b5' }}>Your interview preparation overview. Keep pushing!</p>
         </div>
 
-        {/* Stats Cards */}
+        {/* Stats */}
         {stats && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
-            {/* Resumes Uploaded */}
-            <div className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-600 text-sm font-medium">Resumes Uploaded</p>
-                  <p className="text-3xl font-bold text-blue-600 mt-2">{stats.resumesUploaded}</p>
-                </div>
-                <div className="bg-blue-100 p-4 rounded-lg">
-                  <span className="text-2xl">📄</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Interviews Taken */}
-            <div className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-600 text-sm font-medium">Interviews Taken</p>
-                  <p className="text-3xl font-bold text-purple-600 mt-2">{stats.interviewsTaken}</p>
-                </div>
-                <div className="bg-purple-100 p-4 rounded-lg">
-                  <span className="text-2xl">🎤</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Answers Submitted */}
-            <div className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-600 text-sm font-medium">Answers Submitted</p>
-                  <p className="text-3xl font-bold text-green-600 mt-2">{stats.answersSubmitted}</p>
-                </div>
-                <div className="bg-green-100 p-4 rounded-lg">
-                  <span className="text-2xl">✅</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Average Score */}
-            <div className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-600 text-sm font-medium">Average Score</p>
-                  <p className="text-3xl font-bold text-orange-600 mt-2">{stats.averageScore}%</p>
-                </div>
-                <div className="bg-orange-100 p-4 rounded-lg">
-                  <span className="text-2xl">⭐</span>
-                </div>
-              </div>
-            </div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <StatCard label="Resumes Uploaded" value={stats.resumesUploaded} icon="📄"
+              gradient="linear-gradient(135deg,rgba(59,130,246,0.3),rgba(37,99,235,0.2))" delay={0} />
+            <StatCard label="Interviews Taken" value={stats.interviewsTaken} icon="🎤"
+              gradient="linear-gradient(135deg,rgba(168,85,247,0.3),rgba(124,58,237,0.2))" delay={100} />
+            <StatCard label="Answers Submitted" value={stats.answersSubmitted} icon="✅"
+              gradient="linear-gradient(135deg,rgba(16,185,129,0.3),rgba(5,150,105,0.2))" delay={200} />
+            <StatCard label="Average Score" value={`${stats.averageScore}%`} icon="⭐"
+              gradient="linear-gradient(135deg,rgba(245,158,11,0.3),rgba(217,119,6,0.2))" delay={300} />
           </div>
         )}
 
-        {/* Quick Actions */}
-        <div className="mb-12">
-          <h3 className="text-2xl font-bold text-gray-800 mb-6">Quick Actions</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Upload Resume */}
-            <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg shadow-lg p-8 text-white hover:shadow-xl transition cursor-pointer">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="text-xl font-bold mb-2">Upload Resume</h4>
-                  <p className="text-blue-100 text-sm">
-                    Get AI-powered feedback on your resume
-                  </p>
-                </div>
-                <span className="text-4xl">📤</span>
-              </div>
-              <button
-                onClick={() => navigate('/resume-analyzer')}
-                className="mt-4 bg-white text-blue-600 px-6 py-2 rounded-lg font-semibold hover:bg-blue-50 transition"
-              >
-                Upload Now
-              </button>
-            </div>
-
-            {/* Start Interview */}
-            <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg shadow-lg p-8 text-white hover:shadow-xl transition cursor-pointer">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="text-xl font-bold mb-2">Start Mock Interview</h4>
-                  <p className="text-purple-100 text-sm">
-                    Practice with AI-generated interview questions
-                  </p>
-                </div>
-                <span className="text-4xl">🎙️</span>
-              </div>
-              <button
-                onClick={() => navigate('/interview-setup')}
-                className="mt-4 bg-white text-purple-600 px-6 py-2 rounded-lg font-semibold hover:bg-purple-50 transition"
-              >
-                Start Interview
-              </button>
-            </div>
-          </div>
+        {/* Actions */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-8">
+          <ActionCard title="Upload & Analyze Resume"
+            description="Get AI-powered ATS score, keyword suggestions, and actionable feedback."
+            icon="📤" gradient="linear-gradient(135deg,#1d4ed8,#3b82f6)"
+            buttonLabel="Analyze Resume" onClick={() => navigate('/resume-analyzer')} delay={0} />
+          <ActionCard title="Start Mock Interview"
+            description="Practice with AI-generated questions across 8 roles and 3 difficulty levels."
+            icon="🎙️" gradient="linear-gradient(135deg,#6c5ef7,#8b5cf6)"
+            buttonLabel="Start Interview" onClick={() => navigate('/interview-setup')} delay={100} />
         </div>
 
         {/* Recent Activity */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Recent Interviews */}
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h3 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-              <span className="text-2xl">📋</span> Recent Interviews
-            </h3>
-            {recentInterviews.length > 0 ? (
-              <div className="space-y-4">
-                {recentInterviews.map((interview) => (
-                  <div
-                    key={interview.id}
-                    className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition"
-                  >
-                    <div className="flex justify-between items-start mb-2">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Interviews */}
+          <div className="rounded-2xl" style={{ background: '#13131f', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+              <div className="flex items-center gap-2">
+                <span>📋</span>
+                <h3 className="font-semibold text-white">Recent Interviews</h3>
+              </div>
+              {recentInterviews.length > 0 && (
+                <button onClick={() => navigate('/history')} className="text-xs hover:underline" style={{ color: '#8179fa' }}>View all →</button>
+              )}
+            </div>
+            <div className="p-4">
+              {recentInterviews.length > 0 ? (
+                <div className="space-y-2">
+                  {recentInterviews.map(iv => (
+                    <div key={iv.id} className="flex items-center justify-between px-4 py-3 rounded-xl"
+                      style={{ border: '1px solid rgba(255,255,255,0.04)' }}>
                       <div>
-                        <h4 className="font-semibold text-gray-800">{interview.role}</h4>
-                        <p className="text-xs text-gray-500 mt-1">
-                          Difficulty: <span className="capitalize font-medium">{interview.difficulty}</span>
+                        <p className="text-sm font-semibold text-white">{iv.role}</p>
+                        <p className="text-xs mt-0.5" style={{ color: '#6b6b8a' }}>
+                          <span className="capitalize">{iv.difficulty}</span> · {iv.totalQuestions}Q · {new Date(iv.createdAt).toLocaleDateString()}
                         </p>
                       </div>
-                      <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium">
-                        {interview.averageScore}%
-                      </span>
+                      <Badge variant={scoreBadge(iv.averageScore)}>{iv.averageScore}%</Badge>
                     </div>
-                    <p className="text-xs text-gray-600 mt-3">
-                      {interview.totalQuestions} questions • {interview.answersSubmitted} answered
-                    </p>
-                    <p className="text-xs text-gray-400 mt-2">
-                      {new Date(interview.createdAt).toLocaleDateString()}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-gray-500 text-center py-8">No interviews yet. Start your first one!</p>
-            )}
-            {recentInterviews.length > 0 && (
-              <button
-                onClick={() => navigate('/history')}
-                className="mt-4 w-full text-center text-blue-600 hover:text-blue-700 font-medium py-2 px-4 rounded-lg hover:bg-blue-50 transition"
-              >
-                View Full History →
-              </button>
-            )}
+                  ))}
+                </div>
+              ) : (
+                <div className="py-10 text-center">
+                  <p className="text-4xl mb-3">🎤</p>
+                  <p className="text-sm font-medium text-white mb-1">No interviews yet</p>
+                  <p className="text-xs mb-4" style={{ color: '#6b6b8a' }}>Start your first mock interview now</p>
+                  <button onClick={() => navigate('/interview-setup')} className="px-4 py-2 rounded-lg text-xs font-semibold text-white"
+                    style={{ background: 'rgba(108,94,247,0.2)', border: '1px solid rgba(108,94,247,0.3)' }}>
+                    Start Interview →
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* Recent Resumes */}
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h3 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-              <span className="text-2xl">📄</span> Recent Resumes
-            </h3>
-            {recentResumes.length > 0 ? (
-              <div className="space-y-4">
-                {recentResumes.map((resume) => (
-                  <div
-                    key={resume.id}
-                    className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition"
-                  >
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <h4 className="font-semibold text-gray-800">Resume {resume.id}</h4>
-                        <p className="text-xs text-gray-600 mt-1">
-                          {resume.hasAnalysis ? (
-                            <span className="text-green-600 font-medium">✓ Analyzed</span>
-                          ) : (
-                            <span className="text-yellow-600 font-medium">⚠ Pending Analysis</span>
-                          )}
-                        </p>
-                      </div>
-                    </div>
-                    <p className="text-xs text-gray-400 mt-3">
-                      {new Date(resume.createdAt).toLocaleDateString()}
-                    </p>
-                  </div>
-                ))}
+          {/* Resumes */}
+          <div className="rounded-2xl" style={{ background: '#13131f', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+              <div className="flex items-center gap-2">
+                <span>📄</span>
+                <h3 className="font-semibold text-white">Recent Resumes</h3>
               </div>
-            ) : (
-              <p className="text-gray-500 text-center py-8">No resumes yet. Upload your first resume!</p>
-            )}
-            {recentResumes.length > 0 && (
-              <button
-                onClick={() => navigate('/history')}
-                className="mt-4 w-full text-center text-indigo-600 hover:text-indigo-700 font-medium py-2 px-4 rounded-lg hover:bg-indigo-50 transition"
-              >
-                View Full History →
-              </button>
-            )}
+              {recentResumes.length > 0 && (
+                <button onClick={() => navigate('/history')} className="text-xs hover:underline" style={{ color: '#8179fa' }}>View all →</button>
+              )}
+            </div>
+            <div className="p-4">
+              {recentResumes.length > 0 ? (
+                <div className="space-y-2">
+                  {recentResumes.map(r => (
+                    <div key={r.id} className="flex items-center justify-between px-4 py-3 rounded-xl"
+                      style={{ border: '1px solid rgba(255,255,255,0.04)' }}>
+                      <div>
+                        <p className="text-sm font-semibold text-white">Resume #{r.id}</p>
+                        <p className="text-xs mt-0.5" style={{ color: '#6b6b8a' }}>{new Date(r.createdAt).toLocaleDateString()}</p>
+                      </div>
+                      <Badge variant={r.hasAnalysis ? 'success' : 'warning'}>
+                        {r.hasAnalysis ? '✓ Analyzed' : '⏳ Pending'}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="py-10 text-center">
+                  <p className="text-4xl mb-3">📄</p>
+                  <p className="text-sm font-medium text-white mb-1">No resumes yet</p>
+                  <p className="text-xs mb-4" style={{ color: '#6b6b8a' }}>Upload your resume for ATS analysis</p>
+                  <button onClick={() => navigate('/resume-analyzer')} className="px-4 py-2 rounded-lg text-xs font-semibold text-white"
+                    style={{ background: 'rgba(59,130,246,0.2)', border: '1px solid rgba(59,130,246,0.3)' }}>
+                    Upload Resume →
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </main>
