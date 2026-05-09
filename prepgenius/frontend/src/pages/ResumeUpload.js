@@ -1,299 +1,208 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { resumeAPI } from '../services/api';
+import Badge from '../components/Badge';
+
+const ScoreRing = ({ score, size = 120 }) => {
+  const r = 45; const circ = 2 * Math.PI * r;
+  const offset = circ - (score / 100) * circ;
+  const color = score >= 85 ? '#10b981' : score >= 70 ? '#6c5ef7' : score >= 55 ? '#f59e0b' : '#ef4444';
+  return (
+    <svg width={size} height={size} viewBox="0 0 100 100">
+      <circle cx="50" cy="50" r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="8" />
+      <circle cx="50" cy="50" r={r} fill="none" stroke={color} strokeWidth="8"
+        strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={offset}
+        transform="rotate(-90 50 50)" style={{ transition: 'stroke-dashoffset 1s ease-out' }} />
+      <text x="50" y="50" textAnchor="middle" dominantBaseline="central"
+        fill="white" fontSize="18" fontWeight="bold">{score}</text>
+    </svg>
+  );
+};
 
 const ResumeUpload = () => {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
-
   const [mode, setMode] = useState('file');
   const [file, setFile] = useState(null);
   const [resumeText, setResumeText] = useState('');
   const [jdHints, setJdHints] = useState('');
-
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [analysis, setAnalysis] = useState(null);
   const [templates, setTemplates] = useState([]);
+  const [dragOver, setDragOver] = useState(false);
 
   useEffect(() => {
-    const loadTemplates = async () => {
-      try {
-        const response = await resumeAPI.getTemplates();
-        setTemplates(response.data.templates || []);
-      } catch (err) {
-        console.error('Failed to load templates:', err);
-      }
-    };
-
-    loadTemplates();
+    resumeAPI.getTemplates().then(r => setTemplates(r.data.templates || [])).catch(() => {});
   }, []);
 
-  const isSupportedFile = (selectedFile) => {
-    if (!selectedFile) {
-      return false;
-    }
-    return (
-      selectedFile.type === 'application/pdf' ||
-      selectedFile.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-      selectedFile.type === 'text/plain'
-    );
-  };
+  const isSupportedFile = (f) => f && (
+    f.type === 'application/pdf' ||
+    f.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+    f.type === 'text/plain'
+  );
 
   const handleFileDrop = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const droppedFile = e.dataTransfer.files[0];
-
-    if (!isSupportedFile(droppedFile)) {
-      setError('Please upload a PDF, DOCX, or TXT file');
-      return;
-    }
-
-    setError('');
-    setFile(droppedFile);
+    e.preventDefault(); setDragOver(false);
+    const f = e.dataTransfer.files[0];
+    if (!isSupportedFile(f)) { setError('Please upload a PDF, DOCX, or TXT file'); return; }
+    setError(''); setFile(f);
   };
 
   const handleFileSelect = (e) => {
-    const selectedFile = e.target.files[0];
-    if (!isSupportedFile(selectedFile)) {
-      setError('Please upload a PDF, DOCX, or TXT file');
-      return;
-    }
-
-    setError('');
-    setFile(selectedFile);
+    const f = e.target.files[0];
+    if (!isSupportedFile(f)) { setError('Please upload a PDF, DOCX, or TXT file'); return; }
+    setError(''); setFile(f);
   };
 
   const handleAnalyze = async () => {
-    setLoading(true);
-    setError('');
-
+    setLoading(true); setError('');
     try {
       let response;
-
       if (mode === 'file') {
-        if (!file) {
-          setError('Please select a file first');
-          setLoading(false);
-          return;
-        }
+        if (!file) { setError('Please select a file first'); setLoading(false); return; }
         response = await resumeAPI.uploadResume(file, jdHints);
         setAnalysis(response.data.resume.analysis);
       } else {
-        if (!resumeText || resumeText.trim().length < 50) {
-          setError('Please paste at least 50 characters of resume text');
-          setLoading(false);
-          return;
-        }
+        if (!resumeText || resumeText.trim().length < 50) { setError('Please paste at least 50 characters'); setLoading(false); return; }
         response = await resumeAPI.analyzeText(resumeText, jdHints);
         setAnalysis(response.data.analysis);
       }
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to analyze resume');
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
-  const resetAnalyzer = () => {
-    setAnalysis(null);
-    setFile(null);
-    setResumeText('');
-    setJdHints('');
-    setError('');
-  };
+  const resetAnalyzer = () => { setAnalysis(null); setFile(null); setResumeText(''); setJdHints(''); setError(''); };
 
-  const scoreColor = (score) => {
-    if (score >= 85) {
-      return 'text-green-600';
-    }
-    if (score >= 70) {
-      return 'text-blue-600';
-    }
-    if (score >= 55) {
-      return 'text-yellow-600';
-    }
-    return 'text-red-600';
-  };
+  const breakdownItems = analysis?.sectionBreakdown ? [
+    { label: 'Keyword Alignment', data: analysis.sectionBreakdown.keywordAlignment },
+    { label: 'Structure', data: analysis.sectionBreakdown.structureParseability },
+    { label: 'Formatting', data: analysis.sectionBreakdown.formattingCompatibility },
+    { label: 'Dates', data: analysis.sectionBreakdown.datesConsistency },
+    { label: 'Readability', data: analysis.sectionBreakdown.readability },
+  ] : [];
 
-  const breakdownItems = analysis?.sectionBreakdown
-    ? [
-        {
-          label: 'Keyword Alignment',
-          data: analysis.sectionBreakdown.keywordAlignment
-        },
-        {
-          label: 'Structure & Parseability',
-          data: analysis.sectionBreakdown.structureParseability
-        },
-        {
-          label: 'Formatting Compatibility',
-          data: analysis.sectionBreakdown.formattingCompatibility
-        },
-        {
-          label: 'Dates & Consistency',
-          data: analysis.sectionBreakdown.datesConsistency
-        },
-        {
-          label: 'Readability',
-          data: analysis.sectionBreakdown.readability
-        }
-      ]
-    : [];
+  const cardStyle = { background: '#13131f', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 16 };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-emerald-50">
-      <div className="bg-white border-b border-slate-200">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex justify-between items-center">
-          <div className="cursor-pointer" onClick={() => navigate('/dashboard')}>
-            <h1 className="text-2xl font-bold text-slate-900">PrepGenius ATS</h1>
-            <p className="text-xs text-slate-500">End-to-end ATS resume evaluation</p>
-          </div>
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="text-slate-600 hover:text-slate-900 font-medium"
-          >
-            Back to Dashboard
+    <div className="min-h-screen" style={{ background: '#0a0a12' }}>
+      <div style={{ background: 'rgba(19,19,31,0.9)', borderBottom: '1px solid rgba(255,255,255,0.06)', backdropFilter: 'blur(20px)' }}
+        className="sticky top-0 z-50">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+          <button onClick={() => navigate('/dashboard')} className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm"
+              style={{ background: 'linear-gradient(135deg,#6c5ef7,#4f46e5)' }}>P</div>
+            <span className="text-white font-bold">Prep<span className="gradient-text">Genius</span> <span className="text-xs font-normal" style={{ color: '#6b6b8a' }}>ATS</span></span>
           </button>
+          <button onClick={() => navigate('/dashboard')} className="btn-ghost text-sm px-3 py-1.5">← Dashboard</button>
         </div>
       </div>
 
-      <main className="max-w-6xl mx-auto px-6 py-10">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-10 animate-fade-in">
         {!analysis ? (
           <>
             <div className="mb-8">
-              <h2 className="text-4xl font-bold text-slate-900 mb-2">ATS Resume Evaluator</h2>
-              <p className="text-slate-600">
-                Analyze a resume against ATS criteria with a weighted score, issue flags, keyword guidance, and template recommendations.
-              </p>
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold mb-4"
+                style={{ background: 'rgba(16,185,129,0.12)', color: '#34d399', border: '1px solid rgba(16,185,129,0.2)' }}>
+                📊 ATS Resume Evaluator
+              </div>
+              <h1 className="text-4xl font-bold text-white mb-2">ATS Resume Evaluator</h1>
+              <p style={{ color: '#a1a1b5' }}>Score your resume against ATS criteria with weighted analysis, keyword guidance, and templates.</p>
             </div>
 
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-8">
+            <div className="p-6 mb-6" style={cardStyle}>
               {error && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
-                  {error}
+                <div className="mb-5 px-4 py-3 rounded-xl text-sm flex items-center gap-2"
+                  style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#f87171' }}>
+                  ⚠ {error}
                 </div>
               )}
 
-              <div className="mb-6 inline-flex bg-slate-100 rounded-lg p-1">
-                <button
-                  onClick={() => setMode('file')}
-                  className={`px-4 py-2 rounded-md text-sm font-semibold transition ${
-                    mode === 'file' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600'
-                  }`}
-                >
-                  Upload File
-                </button>
-                <button
-                  onClick={() => setMode('text')}
-                  className={`px-4 py-2 rounded-md text-sm font-semibold transition ${
-                    mode === 'text' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600'
-                  }`}
-                >
-                  Paste Parsed Text
-                </button>
+              {/* Mode Toggle */}
+              <div className="flex gap-1.5 mb-6 p-1 rounded-xl w-fit" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                {[{ key: 'file', label: '📎 Upload File' }, { key: 'text', label: '📋 Paste Text' }].map(m => (
+                  <button key={m.key} onClick={() => setMode(m.key)}
+                    className="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                    style={mode === m.key ? { background: '#6c5ef7', color: 'white' } : { color: '#a1a1b5' }}>
+                    {m.label}
+                  </button>
+                ))}
               </div>
 
               {mode === 'file' ? (
                 <div
                   onDrop={handleFileDrop}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
+                  onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                  onDragLeave={() => setDragOver(false)}
+                  className="rounded-2xl p-10 text-center transition-all duration-200 cursor-pointer"
+                  style={{
+                    border: `2px dashed ${dragOver ? '#6c5ef7' : file ? '#10b981' : 'rgba(255,255,255,0.12)'}`,
+                    background: dragOver ? 'rgba(108,94,247,0.05)' : file ? 'rgba(16,185,129,0.05)' : 'rgba(255,255,255,0.02)',
                   }}
-                  className={`border-2 border-dashed rounded-xl p-8 text-center transition ${
-                    file ? 'border-emerald-500 bg-emerald-50' : 'border-slate-300 bg-slate-50 hover:border-slate-400'
-                  }`}
+                  onClick={() => fileInputRef.current?.click()}
                 >
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleFileSelect}
-                    accept=".pdf,.docx,.txt"
-                    className="hidden"
-                  />
-
-                  <p className="text-4xl mb-3">📄</p>
-                  <h3 className="text-xl font-semibold text-slate-900 mb-1">
-                    {file ? file.name : 'Drop resume file here'}
-                  </h3>
-                  <p className="text-slate-600 mb-4">Supported formats: PDF, DOCX, TXT</p>
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    className="bg-slate-900 text-white px-6 py-2 rounded-lg font-semibold hover:bg-slate-800 transition"
-                  >
-                    Select File
+                  <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept=".pdf,.docx,.txt" className="hidden" />
+                  <div className="text-4xl mb-3">{file ? '✅' : '📁'}</div>
+                  <p className="font-semibold text-white mb-1">{file ? file.name : 'Drop your resume here'}</p>
+                  <p className="text-sm mb-4" style={{ color: '#6b6b8a' }}>PDF, DOCX, or TXT supported</p>
+                  <button className="px-5 py-2 rounded-xl text-sm font-semibold text-white transition-all"
+                    style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.12)' }}
+                    onClick={e => { e.stopPropagation(); fileInputRef.current?.click(); }}>
+                    {file ? 'Change File' : 'Browse File'}
                   </button>
                 </div>
               ) : (
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">Resume Parsed Text</label>
-                  <textarea
-                    value={resumeText}
-                    onChange={(e) => setResumeText(e.target.value)}
-                    rows={14}
-                    placeholder="Paste extracted resume text here..."
-                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  />
+                  <label className="block text-sm font-medium mb-2" style={{ color: '#c1c1d5' }}>Resume Text</label>
+                  <textarea value={resumeText} onChange={e => setResumeText(e.target.value)} rows={12}
+                    placeholder="Paste your extracted resume text here..."
+                    className="input-dark" style={{ resize: 'vertical' }} />
                 </div>
               )}
 
-              <div className="mt-6">
-                <label className="block text-sm font-medium text-slate-700 mb-2">Optional Job Description Hints</label>
-                <textarea
-                  value={jdHints}
-                  onChange={(e) => setJdHints(e.target.value)}
-                  rows={6}
-                  placeholder="Paste the target JD or key requirements to improve keyword alignment scoring..."
-                  className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                />
+              <div className="mt-5">
+                <label className="block text-sm font-medium mb-2" style={{ color: '#c1c1d5' }}>
+                  Job Description Hints <span style={{ color: '#6b6b8a' }}>(optional)</span>
+                </label>
+                <textarea value={jdHints} onChange={e => setJdHints(e.target.value)} rows={5}
+                  placeholder="Paste the target job description or key requirements to improve keyword scoring..."
+                  className="input-dark" style={{ resize: 'vertical' }} />
               </div>
 
-              <div className="mt-6 flex gap-3">
-                <button
-                  onClick={handleAnalyze}
-                  disabled={loading}
-                  className={`px-6 py-3 rounded-lg font-semibold text-white transition ${
-                    loading ? 'bg-slate-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700'
-                  }`}
-                >
-                  {loading ? 'Analyzing ATS compatibility...' : 'Run ATS Evaluation'}
+              <div className="mt-5 flex gap-3">
+                <button onClick={handleAnalyze} disabled={loading}
+                  className="px-6 py-3 rounded-xl font-semibold text-white text-sm transition-all"
+                  style={loading ? { background: 'rgba(16,185,129,0.3)', cursor: 'not-allowed' }
+                    : { background: 'linear-gradient(135deg,#059669,#10b981)', boxShadow: '0 8px 20px rgba(16,185,129,0.3)' }}>
+                  {loading ? (
+                    <span className="flex items-center gap-2">
+                      <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                      </svg>
+                      Analyzing...
+                    </span>
+                  ) : '🔍 Run ATS Evaluation'}
                 </button>
-                <button
-                  onClick={resetAnalyzer}
-                  disabled={loading}
-                  className="px-6 py-3 rounded-lg font-semibold text-slate-800 bg-slate-200 hover:bg-slate-300 transition"
-                >
-                  Reset
-                </button>
+                <button onClick={resetAnalyzer} disabled={loading} className="btn-ghost text-sm px-5 py-3">Reset</button>
               </div>
             </div>
 
             {templates.length > 0 && (
               <div>
-                <h3 className="text-2xl font-bold text-slate-900 mb-4">High-Score ATS Templates</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  {templates.map((template) => (
-                    <div key={template.id} className="bg-white rounded-xl border border-slate-200 p-5">
+                <h3 className="text-xl font-bold text-white mb-4">High-Score ATS Templates</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {templates.map(t => (
+                    <div key={t.id} className="p-5" style={cardStyle}>
                       <div className="flex items-start justify-between gap-2 mb-2">
-                        <h4 className="text-lg font-semibold text-slate-900">{template.name}</h4>
-                        <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full">
-                          Score Potential {template.expectedAtsScoreRange}
-                        </span>
+                        <h4 className="font-semibold text-white">{t.name}</h4>
+                        <Badge variant="success">{t.expectedAtsScoreRange}</Badge>
                       </div>
-                      <p className="text-sm text-slate-600 mb-3">Best for: {template.bestFor}</p>
-                      <p className="text-sm font-medium text-slate-700 mb-1">Why ATS-friendly</p>
-                      <ul className="text-sm text-slate-600 list-disc pl-5 mb-3">
-                        {template.whyItScoresWell.map((point, idx) => (
-                          <li key={idx}>{point}</li>
-                        ))}
-                      </ul>
-                      <p className="text-sm font-medium text-slate-700 mb-1">Tailor to JD</p>
-                      <ul className="text-sm text-slate-600 list-disc pl-5">
-                        {template.tailoringInstructions.map((point, idx) => (
-                          <li key={idx}>{point}</li>
-                        ))}
+                      <p className="text-xs mb-3" style={{ color: '#a1a1b5' }}>Best for: {t.bestFor}</p>
+                      <p className="text-xs font-semibold text-white mb-1">Why ATS-Friendly</p>
+                      <ul className="text-xs space-y-0.5 mb-3" style={{ color: '#a1a1b5' }}>
+                        {t.whyItScoresWell.map((p, i) => <li key={i}>• {p}</li>)}
                       </ul>
                     </div>
                   ))}
@@ -303,124 +212,85 @@ const ResumeUpload = () => {
           </>
         ) : (
           <>
-            <button onClick={resetAnalyzer} className="text-emerald-700 hover:text-emerald-900 font-semibold mb-5">
-              ← Analyze Another Resume
-            </button>
+            <button onClick={resetAnalyzer} className="flex items-center gap-2 mb-6 text-sm font-medium hover:underline transition-colors"
+              style={{ color: '#34d399' }}>← Analyze Another Resume</button>
 
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-6">
-              <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 pb-6 border-b border-slate-200 mb-6">
+            <div className="p-6 mb-5" style={cardStyle}>
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6 pb-6 mb-6 border-b" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
                 <div>
-                  <h2 className="text-3xl font-bold text-slate-900">ATS Report</h2>
-                  <p className="text-slate-600 mt-1">Workflow: {analysis.workflowVersion || 'ats-v1.0'}</p>
+                  <h2 className="text-2xl font-bold text-white mb-1">ATS Report</h2>
+                  <p className="text-sm" style={{ color: '#6b6b8a' }}>Workflow: {analysis.workflowVersion || 'ats-v1.0'}</p>
                 </div>
-                <div className="text-right">
-                  <p className="text-sm text-slate-500">Overall ATS Score</p>
-                  <p className={`text-5xl font-bold ${scoreColor(analysis.overallScore || 0)}`}>
-                    {analysis.overallScore || 0}
-                  </p>
-                  <p className="text-slate-500">/100</p>
+                <div className="flex flex-col items-center">
+                  <ScoreRing score={analysis.overallScore || 0} />
+                  <p className="text-xs mt-1" style={{ color: '#6b6b8a' }}>Overall ATS Score</p>
                 </div>
               </div>
 
-              <div className="mb-6 p-4 bg-slate-50 border border-slate-200 rounded-lg">
-                <p className="text-slate-700">{analysis.summary}</p>
+              <div className="p-4 rounded-xl mb-6 text-sm" style={{ background: 'rgba(255,255,255,0.04)', color: '#c1c1d5' }}>
+                {analysis.summary}
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
-                {breakdownItems.map((item) => (
-                  <div key={item.label} className="bg-slate-50 rounded-lg border border-slate-200 p-4">
-                    <p className="text-xs text-slate-500 mb-1">{item.label}</p>
-                    <p className="text-2xl font-bold text-slate-900">
-                      {item.data?.score || 0}
-                      <span className="text-sm text-slate-500"> / {item.data?.max || 0}</span>
+              {/* Section Breakdown */}
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+                {breakdownItems.map(item => (
+                  <div key={item.label} className="p-3 rounded-xl text-center" style={{ background: 'rgba(255,255,255,0.04)' }}>
+                    <p className="text-xs mb-1" style={{ color: '#6b6b8a' }}>{item.label}</p>
+                    <p className="text-lg font-bold text-white">{item.data?.score || 0}
+                      <span className="text-xs font-normal" style={{ color: '#6b6b8a' }}>/{item.data?.max || 0}</span>
                     </p>
+                    <div className="progress-bar-track mt-2">
+                      <div className="progress-bar-fill" style={{ width: `${((item.data?.score || 0) / (item.data?.max || 1)) * 100}%` }} />
+                    </div>
                   </div>
                 ))}
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                <div className="bg-red-50 border border-red-200 rounded-lg p-5">
-                  <h3 className="font-semibold text-red-800 mb-3">Flagged ATS Issues</h3>
-                  <ul className="space-y-2 text-sm text-red-700">
-                    {(analysis.flaggedIssues || []).length > 0 ? (
-                      analysis.flaggedIssues.map((issue, idx) => <li key={idx}>• {issue}</li>)
-                    ) : (
-                      <li>No critical ATS issues found.</li>
-                    )}
+              {/* Issues + Action Plan */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+                <div className="p-4 rounded-xl" style={{ background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.15)' }}>
+                  <h3 className="font-semibold mb-3 text-sm" style={{ color: '#f87171' }}>⚠ Flagged ATS Issues</h3>
+                  <ul className="space-y-1.5 text-xs" style={{ color: '#fca5a5' }}>
+                    {(analysis.flaggedIssues || []).length > 0
+                      ? analysis.flaggedIssues.map((issue, i) => <li key={i}>• {issue}</li>)
+                      : <li>✓ No critical issues found.</li>}
                   </ul>
                 </div>
-
-                <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-5">
-                  <h3 className="font-semibold text-emerald-800 mb-3">Action Plan Checklist</h3>
-                  <ul className="space-y-2 text-sm text-emerald-700">
-                    {(analysis.remediationSteps || []).map((step, idx) => (
-                      <li key={idx}>□ {step}</li>
-                    ))}
+                <div className="p-4 rounded-xl" style={{ background: 'rgba(16,185,129,0.07)', border: '1px solid rgba(16,185,129,0.15)' }}>
+                  <h3 className="font-semibold mb-3 text-sm" style={{ color: '#34d399' }}>✅ Action Plan</h3>
+                  <ul className="space-y-1.5 text-xs" style={{ color: '#6ee7b7' }}>
+                    {(analysis.remediationSteps || []).map((s, i) => <li key={i}>□ {s}</li>)}
                   </ul>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-5">
-                  <h3 className="font-semibold text-blue-800 mb-3">Targeted Keyword Suggestions</h3>
+              {/* Keywords + Template Guidance */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div className="p-4 rounded-xl" style={{ background: 'rgba(108,94,247,0.07)', border: '1px solid rgba(108,94,247,0.15)' }}>
+                  <h3 className="font-semibold mb-3 text-sm" style={{ color: '#8179fa' }}>🔑 Keyword Suggestions</h3>
                   <div className="flex flex-wrap gap-2">
-                    {(analysis.recommendations?.targetedKeywordSuggestions || []).map((kw) => (
-                      <span key={kw} className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
-                        {kw}
-                      </span>
+                    {(analysis.recommendations?.targetedKeywordSuggestions || []).map(kw => (
+                      <Badge key={kw} variant="brand">{kw}</Badge>
                     ))}
                   </div>
                 </div>
-
-                <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-5">
-                  <h3 className="font-semibold text-indigo-800 mb-3">Template Fit Guidance</h3>
-                  <p className="text-sm text-indigo-700">
+                <div className="p-4 rounded-xl" style={{ background: 'rgba(59,130,246,0.07)', border: '1px solid rgba(59,130,246,0.15)' }}>
+                  <h3 className="font-semibold mb-3 text-sm" style={{ color: '#60a5fa' }}>📋 Template Guidance</h3>
+                  <p className="text-xs" style={{ color: '#93c5fd' }}>
                     {analysis.recommendations?.templateFitGuidance || 'Use ATS Classic Chronological by default.'}
                   </p>
                 </div>
               </div>
 
-              <div className="pt-6 border-t border-slate-200 flex gap-3">
-                <button
-                  onClick={resetAnalyzer}
-                  className="bg-emerald-600 text-white px-5 py-2 rounded-lg font-semibold hover:bg-emerald-700 transition"
-                >
-                  Analyze Another Resume
-                </button>
-                <button
-                  onClick={() => navigate('/dashboard')}
-                  className="bg-slate-200 text-slate-800 px-5 py-2 rounded-lg font-semibold hover:bg-slate-300 transition"
-                >
-                  Back to Dashboard
-                </button>
+              <div className="flex gap-3 pt-4 border-t" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+                <button onClick={resetAnalyzer} className="px-5 py-2.5 rounded-xl text-sm font-semibold text-white"
+                  style={{ background: 'linear-gradient(135deg,#059669,#10b981)' }}>Analyze Another</button>
+                <button onClick={() => navigate('/dashboard')} className="btn-ghost text-sm px-5 py-2.5">← Dashboard</button>
               </div>
             </div>
-
-            {analysis.templates?.length > 0 && (
-              <div className="bg-white rounded-2xl border border-slate-200 p-6">
-                <h3 className="text-2xl font-bold text-slate-900 mb-4">Ready-to-Use ATS Templates</h3>
-                <div className="space-y-5">
-                  {analysis.templates.map((template) => (
-                    <div key={template.id} className="border border-slate-200 rounded-lg p-5">
-                      <div className="flex items-start justify-between mb-3 gap-3">
-                        <h4 className="text-lg font-semibold text-slate-900">{template.name}</h4>
-                        <span className="text-xs bg-slate-100 text-slate-700 px-2 py-1 rounded-full">
-                          {template.expectedAtsScoreRange}
-                        </span>
-                      </div>
-                      <p className="text-sm text-slate-600 mb-2">{template.bestFor}</p>
-                      <p className="text-sm font-medium text-slate-700 mb-1">Template Content</p>
-                      <pre className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs text-slate-700 overflow-auto whitespace-pre-wrap">
-                        {template.templateText}
-                      </pre>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </>
         )}
-      </main>
+      </div>
     </div>
   );
 };
