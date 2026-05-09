@@ -256,7 +256,8 @@ const InterviewSession = () => {
     if (timeLeft === 0) { submitAnswer({ timedOut: true }); return; }
     const t = setInterval(() => setTimeLeft(p => Math.max(p-1,0)), 1000);
     return () => clearInterval(t);
-  }, [interview, curQ, showFeedback, hasSub, loading, timeLeft]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [interview, curQ, showFeedback, hasSub, loading, timeLeft, mode]);
 
   useEffect(() => {
     if (!interview || mode!=='timed') return;
@@ -269,6 +270,7 @@ const InterviewSession = () => {
     if (!interview || mode!=='timed' || totalTimeLeft!==0) return;
     submitAnswer({ timedOut: true });
     navigate('/interview-results', { state: { interviewId: interview.interviewId } });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [totalTimeLeft]);
 
   const timerColor = useMemo(() => { const v = mode==='timed' ? totalTimeLeft : timeLeft; return v<=10 ? '#ef4444' : v<=20 ? '#f59e0b' : '#10b981'; }, [mode, timeLeft, totalTimeLeft]);
