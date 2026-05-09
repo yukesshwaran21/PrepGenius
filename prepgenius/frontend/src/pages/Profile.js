@@ -7,11 +7,9 @@ const Profile = () => {
   const [profileLoading, setProfileLoading] = useState(true);
   const [profileError, setProfileError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
-
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [nameLoading, setNameLoading] = useState(false);
-
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -30,186 +28,152 @@ const Profile = () => {
         setProfileLoading(false);
       }
     };
-
     fetchProfile();
   }, []);
 
   const handleNameUpdate = async (e) => {
     e.preventDefault();
-    setSuccessMessage('');
-    setProfileError('');
-
-    if (!name.trim()) {
-      setProfileError('Name is required');
-      return;
-    }
-
+    setSuccessMessage(''); setProfileError('');
+    if (!name.trim()) { setProfileError('Name is required'); return; }
     setNameLoading(true);
-
     try {
       const response = await authAPI.updateName(name.trim());
-      const updatedUser = response.data.user;
-
-      localStorage.setItem('user', JSON.stringify(updatedUser));
-      setName(updatedUser.name);
+      localStorage.setItem('user', JSON.stringify(response.data.user));
+      setName(response.data.user.name);
       setSuccessMessage('Name updated successfully');
     } catch (error) {
       setProfileError(error.response?.data?.error || 'Failed to update name');
-    } finally {
-      setNameLoading(false);
-    }
+    } finally { setNameLoading(false); }
   };
 
   const handlePasswordUpdate = async (e) => {
     e.preventDefault();
-    setSuccessMessage('');
-    setProfileError('');
-
-    if (!currentPassword || !newPassword || !confirmPassword) {
-      setProfileError('All password fields are required');
-      return;
-    }
-
-    if (newPassword.length < 6) {
-      setProfileError('New password must be at least 6 characters');
-      return;
-    }
-
-    if (newPassword !== confirmPassword) {
-      setProfileError('New password and confirm password do not match');
-      return;
-    }
-
+    setSuccessMessage(''); setProfileError('');
+    if (!currentPassword || !newPassword || !confirmPassword) { setProfileError('All password fields are required'); return; }
+    if (newPassword.length < 6) { setProfileError('New password must be at least 6 characters'); return; }
+    if (newPassword !== confirmPassword) { setProfileError('Passwords do not match'); return; }
     setPasswordLoading(true);
-
     try {
       await authAPI.updatePassword(currentPassword, newPassword);
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
+      setCurrentPassword(''); setNewPassword(''); setConfirmPassword('');
       setSuccessMessage('Password updated successfully');
     } catch (error) {
       setProfileError(error.response?.data?.error || 'Failed to update password');
-    } finally {
-      setPasswordLoading(false);
-    }
+    } finally { setPasswordLoading(false); }
   };
+
+  const initials = name ? name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) : '?';
 
   if (profileLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center" style={{ background: '#0a0a12' }}>
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading profile...</p>
+          <div className="w-10 h-10 rounded-full border-2 border-violet-500 border-t-transparent animate-spin mx-auto mb-3" />
+          <p style={{ color: '#a1a1b5' }}>Loading profile...</p>
         </div>
       </div>
     );
   }
 
+  const cardStyle = { background: '#13131f', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 16 };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-12 px-4">
-      <div className="max-w-2xl mx-auto">
-        <div className="mb-8 flex items-center justify-between gap-3">
-          <div>
-            <h1 className="text-4xl font-bold text-gray-900">Profile</h1>
-            <p className="text-gray-600 mt-1">Update your account details.</p>
-          </div>
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 transition"
-          >
-            Back to Dashboard
+    <div className="min-h-screen" style={{ background: '#0a0a12' }}>
+      <div style={{ background: 'rgba(19,19,31,0.9)', borderBottom: '1px solid rgba(255,255,255,0.06)', backdropFilter: 'blur(20px)' }}
+        className="sticky top-0 z-50">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+          <button onClick={() => navigate('/dashboard')} className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm"
+              style={{ background: 'linear-gradient(135deg,#6c5ef7,#4f46e5)' }}>P</div>
+            <span className="text-white font-bold">Prep<span className="gradient-text">Genius</span></span>
           </button>
+          <button onClick={() => navigate('/dashboard')} className="btn-ghost text-sm px-3 py-1.5">← Dashboard</button>
+        </div>
+      </div>
+
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-10 animate-fade-in">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-white mb-1">Profile Settings</h1>
+          <p style={{ color: '#a1a1b5' }}>Manage your account details and security.</p>
         </div>
 
         {profileError && (
-          <div className="mb-6 p-4 rounded-lg bg-red-50 border border-red-200 text-red-700">
-            {profileError}
+          <div className="mb-5 px-4 py-3 rounded-xl text-sm flex items-center gap-2"
+            style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#f87171' }}>
+            ⚠ {profileError}
           </div>
         )}
-
         {successMessage && (
-          <div className="mb-6 p-4 rounded-lg bg-green-50 border border-green-200 text-green-700">
-            {successMessage}
+          <div className="mb-5 px-4 py-3 rounded-xl text-sm flex items-center gap-2"
+            style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.2)', color: '#34d399' }}>
+            ✓ {successMessage}
           </div>
         )}
 
-        <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 mb-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Account Details</h2>
-          <p className="text-sm text-gray-500 mb-1">Email (read-only)</p>
-          <p className="font-medium text-gray-800">{email}</p>
+        {/* Avatar Card */}
+        <div className="p-6 mb-5 flex items-center gap-5" style={cardStyle}>
+          <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-bold text-white flex-shrink-0"
+            style={{ background: 'linear-gradient(135deg,#6c5ef7,#7c3aed)', boxShadow: '0 0 24px rgba(108,94,247,0.4)' }}>
+            {initials}
+          </div>
+          <div>
+            <p className="text-lg font-bold text-white">{name}</p>
+            <p className="text-sm mt-0.5" style={{ color: '#6b6b8a' }}>{email}</p>
+            <div className="inline-flex items-center gap-1.5 mt-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
+              style={{ background: 'rgba(108,94,247,0.15)', color: '#8179fa' }}>
+              ✦ Active Member
+            </div>
+          </div>
         </div>
 
-        <form onSubmit={handleNameUpdate} className="bg-white rounded-xl shadow-md border border-gray-100 p-6 mb-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Update Name</h2>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Full Name</label>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            placeholder="Enter your full name"
-            required
-          />
-          <button
-            type="submit"
-            disabled={nameLoading}
-            className={`mt-4 px-5 py-2 rounded-lg font-semibold text-white transition ${
-              nameLoading ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
-            }`}
-          >
+        {/* Account Details */}
+        <div className="p-6 mb-5" style={cardStyle}>
+          <h2 className="text-base font-semibold text-white mb-4">Account Details</h2>
+          <div>
+            <label className="block text-xs font-medium mb-1" style={{ color: '#6b6b8a' }}>Email (read-only)</label>
+            <div className="px-4 py-3 rounded-xl text-sm" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', color: '#a1a1b5' }}>
+              {email}
+            </div>
+          </div>
+        </div>
+
+        {/* Update Name */}
+        <form onSubmit={handleNameUpdate} className="p-6 mb-5" style={cardStyle}>
+          <h2 className="text-base font-semibold text-white mb-4">Update Display Name</h2>
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-2" style={{ color: '#c1c1d5' }}>Full Name</label>
+            <input type="text" value={name} onChange={e => setName(e.target.value)}
+              className="input-dark" placeholder="Enter your full name" required />
+          </div>
+          <button type="submit" disabled={nameLoading}
+            className="px-5 py-2.5 rounded-xl font-semibold text-white text-sm transition-all"
+            style={nameLoading ? { background: 'rgba(108,94,247,0.3)', cursor: 'not-allowed' }
+              : { background: 'linear-gradient(135deg,#6c5ef7,#4f46e5)' }}>
             {nameLoading ? 'Updating...' : 'Update Name'}
           </button>
         </form>
 
-        <form onSubmit={handlePasswordUpdate} className="bg-white rounded-xl shadow-md border border-gray-100 p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Update Password</h2>
-
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Current Password</label>
-            <input
-              type="password"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="Enter current password"
-              required
-            />
+        {/* Update Password */}
+        <form onSubmit={handlePasswordUpdate} className="p-6" style={cardStyle}>
+          <h2 className="text-base font-semibold text-white mb-4">Change Password</h2>
+          <div className="space-y-4">
+            {[
+              { label: 'Current Password', value: currentPassword, onChange: setCurrentPassword, placeholder: 'Enter current password' },
+              { label: 'New Password', value: newPassword, onChange: setNewPassword, placeholder: 'Enter new password' },
+              { label: 'Confirm New Password', value: confirmPassword, onChange: setConfirmPassword, placeholder: 'Confirm new password' },
+            ].map(field => (
+              <div key={field.label}>
+                <label className="block text-sm font-medium mb-2" style={{ color: '#c1c1d5' }}>{field.label}</label>
+                <input type="password" value={field.value} onChange={e => field.onChange(e.target.value)}
+                  className="input-dark" placeholder={field.placeholder} required />
+              </div>
+            ))}
+            <p className="text-xs" style={{ color: '#6b6b8a' }}>Password must be at least 6 characters.</p>
           </div>
-
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">New Password</label>
-            <input
-              type="password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="Enter new password"
-              required
-            />
-          </div>
-
-          <div className="mb-2">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Confirm New Password</label>
-            <input
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="Confirm new password"
-              required
-            />
-          </div>
-
-          <p className="text-xs text-gray-500 mt-2">Password must be at least 6 characters.</p>
-
-          <button
-            type="submit"
-            disabled={passwordLoading}
-            className={`mt-4 px-5 py-2 rounded-lg font-semibold text-white transition ${
-              passwordLoading ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
-            }`}
-          >
+          <button type="submit" disabled={passwordLoading}
+            className="mt-5 px-5 py-2.5 rounded-xl font-semibold text-white text-sm transition-all"
+            style={passwordLoading ? { background: 'rgba(108,94,247,0.3)', cursor: 'not-allowed' }
+              : { background: 'linear-gradient(135deg,#6c5ef7,#4f46e5)' }}>
             {passwordLoading ? 'Updating...' : 'Update Password'}
           </button>
         </form>
