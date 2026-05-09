@@ -1,316 +1,182 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { interviewAPI } from '../services/api';
+import Badge from '../components/Badge';
+
+const ROLES = ['React Developer','Angular Developer','Vue Developer','Java Developer','Python Developer','Node.js Developer','Full Stack Developer','DevOps Engineer'];
+const DIFFICULTIES = ['beginner','intermediate','advanced'];
+const S = { background:'#13131f', border:'1px solid rgba(255,255,255,0.06)', borderRadius:16 };
+const selectStyle = { background:'#1c1c30', border:'1px solid rgba(255,255,255,0.1)', color:'#e1e1f5', borderRadius:10, padding:'0.5rem 0.75rem', width:'100%', fontSize:'0.875rem' };
 
 const InterviewHistory = () => {
   const navigate = useNavigate();
   const [interviews, setInterviews] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [selectedInterview, setSelectedInterview] = useState(null);
   const [filterRole, setFilterRole] = useState('');
   const [filterDifficulty, setFilterDifficulty] = useState('');
   const [sortBy, setSortBy] = useState('recent');
 
-  const roles = [
-    'React Developer',
-    'Angular Developer',
-    'Vue Developer',
-    'Java Developer',
-    'Python Developer',
-    'Node.js Developer',
-    'Full Stack Developer',
-    'DevOps Engineer'
-  ];
-
-  const difficulties = ['beginner', 'intermediate', 'advanced'];
-
   useEffect(() => {
-    const fetchInterviews = async () => {
-      try {
-        const data = await interviewAPI.getUserInterviews(50);
-        setInterviews(data);
-      } catch (err) {
-        setError(err.response?.data?.error || 'Failed to fetch interviews');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchInterviews();
+    interviewAPI.getUserInterviews(50)
+      .then(data => setInterviews(data))
+      .catch(err => setError(err.response?.data?.error || 'Failed to fetch interviews'))
+      .finally(() => setLoading(false));
   }, []);
 
-  // Filter and sort interviews
-  const filteredInterviews = interviews
-    .filter(interview => {
-      if (filterRole && interview.role !== filterRole) return false;
-      if (filterDifficulty && interview.difficulty !== filterDifficulty) return false;
-      return true;
-    })
-    .sort((a, b) => {
-      if (sortBy === 'recent') {
-        return new Date(b.createdAt) - new Date(a.createdAt);
-      } else if (sortBy === 'highest') {
-        return b.averageScore - a.averageScore;
-      } else if (sortBy === 'lowest') {
-        return a.averageScore - b.averageScore;
-      }
-      return 0;
-    });
+  const filtered = interviews
+    .filter(iv => (!filterRole || iv.role === filterRole) && (!filterDifficulty || iv.difficulty === filterDifficulty))
+    .sort((a,b) => sortBy==='highest' ? b.averageScore-a.averageScore : sortBy==='lowest' ? a.averageScore-b.averageScore : new Date(b.createdAt)-new Date(a.createdAt));
 
-  // Calculate overall stats
-  const overallStats = {
-    totalInterviews: interviews.length,
-    averageScore: interviews.length > 0 
-      ? Math.round(interviews.reduce((sum, i) => sum + i.averageScore, 0) / interviews.length)
-      : 0,
-    bestScore: interviews.length > 0 ? Math.max(...interviews.map(i => i.averageScore)) : 0,
-    worstScore: interviews.length > 0 ? Math.min(...interviews.map(i => i.averageScore)) : 0,
+  const stats = {
+    total: interviews.length,
+    avg: interviews.length ? Math.round(interviews.reduce((s,i)=>s+i.averageScore,0)/interviews.length) : 0,
+    best: interviews.length ? Math.max(...interviews.map(i=>i.averageScore)) : 0,
+    totalQ: interviews.reduce((s,i)=>s+i.totalQuestions,0),
   };
 
-  // Role statistics
   const roleStats = {};
-  interviews.forEach(interview => {
-    if (!roleStats[interview.role]) {
-      roleStats[interview.role] = { count: 0, totalScore: 0 };
-    }
-    roleStats[interview.role].count++;
-    roleStats[interview.role].totalScore += interview.averageScore;
+  interviews.forEach(iv => {
+    if (!roleStats[iv.role]) roleStats[iv.role] = { count:0, total:0 };
+    roleStats[iv.role].count++; roleStats[iv.role].total += iv.averageScore;
   });
 
-  const getScoreColor = (score) => {
-    if (score >= 80) return 'text-green-600';
-    if (score >= 60) return 'text-blue-600';
-    if (score >= 40) return 'text-yellow-600';
-    return 'text-red-600';
-  };
+  const scoreBadge = (s) => s>=80?'success':s>=60?'info':s>=40?'warning':'danger';
+  const diffLabel = { beginner:'Beginner', intermediate:'Intermediate', advanced:'Advanced' };
 
-  const getScoreBg = (score) => {
-    if (score >= 80) return 'bg-green-50';
-    if (score >= 60) return 'bg-blue-50';
-    if (score >= 40) return 'bg-yellow-50';
-    return 'bg-red-50';
-  };
-  const difficultyLabels = {
-    beginner: 'low',
-    intermediate: 'medium',
-    advanced: 'hard'
-  };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin text-4xl mb-4">⏳</div>
-          <p className="text-gray-600">Loading your interview history...</p>
-        </div>
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center" style={{ background:'#0a0a12' }}>
+      <div className="text-center">
+        <div className="w-10 h-10 rounded-full border-2 border-violet-500 border-t-transparent animate-spin mx-auto mb-3" />
+        <p style={{ color:'#a1a1b5' }}>Loading interview history...</p>
       </div>
-    );
-  }
+    </div>
+  );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-12 px-4">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
+    <div className="min-h-screen" style={{ background:'#0a0a12' }}>
+      <div style={{ background:'rgba(19,19,31,0.9)', borderBottom:'1px solid rgba(255,255,255,0.06)', backdropFilter:'blur(20px)' }} className="sticky top-0 z-50">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+          <button onClick={() => navigate('/dashboard')} className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm" style={{ background:'linear-gradient(135deg,#6c5ef7,#4f46e5)' }}>P</div>
+            <span className="text-white font-bold">Prep<span className="gradient-text">Genius</span></span>
+          </button>
+          <button onClick={() => navigate('/dashboard')} className="btn-ghost text-sm px-3 py-1.5">← Dashboard</button>
+        </div>
+      </div>
+
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10 animate-fade-in">
         <div className="mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">📊 Interview History</h1>
-          <p className="text-gray-600">Track your interview performance and progress over time</p>
+          <h1 className="text-3xl font-bold text-white mb-1">Interview History</h1>
+          <p style={{ color:'#a1a1b5' }}>Track your performance and progress over time.</p>
         </div>
 
-        {error && (
-          <div className="mb-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
-            {error}
-          </div>
-        )}
+        {error && <div className="mb-5 px-4 py-3 rounded-xl text-sm" style={{ background:'rgba(239,68,68,0.1)', border:'1px solid rgba(239,68,68,0.2)', color:'#f87171' }}>⚠ {error}</div>}
 
-        {/* Overall Statistics */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-          <div className="bg-white rounded-lg shadow p-6">
-            <p className="text-gray-600 text-sm font-medium">Total Interviews</p>
-            <p className="text-4xl font-bold text-blue-600 mt-2">{overallStats.totalInterviews}</p>
-          </div>
-          <div className="bg-white rounded-lg shadow p-6">
-            <p className="text-gray-600 text-sm font-medium">Average Score</p>
-            <p className="text-4xl font-bold text-green-600 mt-2">{overallStats.averageScore}%</p>
-          </div>
-          <div className="bg-white rounded-lg shadow p-6">
-            <p className="text-gray-600 text-sm font-medium">Best Score</p>
-            <p className="text-4xl font-bold text-emerald-600 mt-2">{overallStats.bestScore}%</p>
-          </div>
-          <div className="bg-white rounded-lg shadow p-6">
-            <p className="text-gray-600 text-sm font-medium">Total Questions</p>
-            <p className="text-4xl font-bold text-purple-600 mt-2">
-              {interviews.reduce((sum, i) => sum + i.totalQuestions, 0)}
-            </p>
-          </div>
+        {/* Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          {[
+            { label:'Total Interviews', value:stats.total, color:'#8179fa' },
+            { label:'Average Score', value:`${stats.avg}%`, color:'#34d399' },
+            { label:'Best Score', value:`${stats.best}%`, color:'#60a5fa' },
+            { label:'Total Questions', value:stats.totalQ, color:'#fbbf24' },
+          ].map(s => (
+            <div key={s.label} className="rounded-2xl p-5" style={S}>
+              <p className="text-xs mb-2" style={{ color:'#6b6b8a' }}>{s.label}</p>
+              <p className="text-2xl font-bold" style={{ color:s.color }}>{s.value}</p>
+            </div>
+          ))}
         </div>
 
         {interviews.length === 0 ? (
-          <div className="bg-white rounded-lg shadow p-12 text-center">
-            <p className="text-4xl mb-4">🎤</p>
-            <p className="text-gray-600 mb-4">No interviews yet. Start your first mock interview!</p>
-            <button
-              onClick={() => navigate('/interview-setup')}
-              className="bg-gradient-to-r from-blue-500 to-purple-600 text-white font-semibold py-2 px-6 rounded-lg hover:shadow-lg transition"
-            >
-              Start Interview
-            </button>
+          <div className="py-16 text-center rounded-2xl" style={S}>
+            <p className="text-4xl mb-3">🎤</p>
+            <p className="text-white font-medium mb-1">No interviews yet</p>
+            <p className="text-sm mb-4" style={{ color:'#6b6b8a' }}>Start your first mock interview</p>
+            <button onClick={() => navigate('/interview-setup')} className="px-5 py-2 rounded-xl text-sm font-semibold text-white"
+              style={{ background:'linear-gradient(135deg,#6c5ef7,#4f46e5)' }}>Start Interview</button>
           </div>
         ) : (
           <>
-            {/* Filters and Sorting */}
-            <div className="bg-white rounded-lg shadow p-6 mb-8">
-              <h3 className="font-semibold text-gray-900 mb-4">Filters & Sort</h3>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {/* Role Breakdown */}
+            {Object.keys(roleStats).length > 0 && (
+              <div className="p-6 mb-6 rounded-2xl" style={S}>
+                <h3 className="text-sm font-semibold text-white mb-4">📈 Performance by Role</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {Object.entries(roleStats).sort((a,b)=>b[1].count-a[1].count).map(([role, rs]) => {
+                    const avg = Math.round(rs.total/rs.count);
+                    return (
+                      <div key={role} className="p-3 rounded-xl" style={{ background:'rgba(255,255,255,0.04)' }}>
+                        <p className="text-xs font-medium text-white truncate mb-1">{role}</p>
+                        <p className="text-xs mb-1.5" style={{ color:'#6b6b8a' }}>{rs.count} interview{rs.count>1?'s':''}</p>
+                        <Badge variant={scoreBadge(avg)}>{avg}% avg</Badge>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Filters */}
+            <div className="p-5 mb-6 rounded-2xl" style={S}>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 items-end">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Role</label>
-                  <select
-                    value={filterRole}
-                    onChange={(e) => setFilterRole(e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
+                  <label className="block text-xs font-medium mb-1.5" style={{ color:'#a1a1b5' }}>Role</label>
+                  <select value={filterRole} onChange={e=>setFilterRole(e.target.value)} style={selectStyle}>
                     <option value="">All Roles</option>
-                    {roles.map(role => (
-                      <option key={role} value={role}>{role}</option>
-                    ))}
+                    {ROLES.map(r=><option key={r} value={r}>{r}</option>)}
                   </select>
                 </div>
-
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Difficulty</label>
-                  <select
-                    value={filterDifficulty}
-                    onChange={(e) => setFilterDifficulty(e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
+                  <label className="block text-xs font-medium mb-1.5" style={{ color:'#a1a1b5' }}>Difficulty</label>
+                  <select value={filterDifficulty} onChange={e=>setFilterDifficulty(e.target.value)} style={selectStyle}>
                     <option value="">All Levels</option>
-                    {difficulties.map(difficulty => (
-                      <option key={difficulty} value={difficulty}>
-                        {difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}
-                      </option>
-                    ))}
+                    {DIFFICULTIES.map(d=><option key={d} value={d}>{diffLabel[d]}</option>)}
                   </select>
                 </div>
-
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Sort By</label>
-                  <select
-                    value={sortBy}
-                    onChange={(e) => setSortBy(e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
+                  <label className="block text-xs font-medium mb-1.5" style={{ color:'#a1a1b5' }}>Sort By</label>
+                  <select value={sortBy} onChange={e=>setSortBy(e.target.value)} style={selectStyle}>
                     <option value="recent">Most Recent</option>
                     <option value="highest">Highest Score</option>
                     <option value="lowest">Lowest Score</option>
                   </select>
                 </div>
-
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Results</label>
-                  <p className="text-2xl font-bold text-blue-600 mt-2">{filteredInterviews.length}</p>
+                  <p className="text-xs mb-1.5" style={{ color:'#a1a1b5' }}>Results</p>
+                  <p className="text-xl font-bold" style={{ color:'#8179fa' }}>{filtered.length}</p>
                 </div>
               </div>
             </div>
 
-            {/* Role Statistics */}
-            {Object.keys(roleStats).length > 0 && (
-              <div className="bg-white rounded-lg shadow p-6 mb-8">
-                <h3 className="font-semibold text-gray-900 mb-4">📈 Performance by Role</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {Object.entries(roleStats)
-                    .sort((a, b) => b[1].count - a[1].count)
-                    .map(([role, stats]) => (
-                      <div key={role} className="border border-gray-200 rounded-lg p-4">
-                        <h4 className="font-semibold text-gray-800 mb-2">{role}</h4>
-                        <div className="flex justify-between items-center">
-                          <div>
-                            <p className="text-sm text-gray-600">Interviews: {stats.count}</p>
-                            <p className={`text-lg font-bold mt-1 ${getScoreColor(Math.round(stats.totalScore / stats.count))}`}>
-                              {Math.round(stats.totalScore / stats.count)}% avg
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+            {/* List */}
+            <div className="space-y-3">
+              {filtered.length === 0 ? (
+                <div className="py-10 text-center rounded-2xl" style={S}>
+                  <p className="text-white">No interviews match your filters</p>
                 </div>
-              </div>
-            )}
-
-            {/* Interviews List */}
-            <div className="space-y-4">
-              <h3 className="font-semibold text-gray-900 text-lg">All Interviews</h3>
-              {filteredInterviews.length > 0 ? (
-                filteredInterviews.map((interview) => (
-                  <div
-                    key={interview.id}
-                    className={`border-2 rounded-lg p-6 cursor-pointer transition hover:shadow-lg ${
-                      selectedInterview?.id === interview.id
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200 bg-white'
-                    }`}
-                    onClick={() => setSelectedInterview(interview)}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <h4 className="text-lg font-semibold text-gray-900">{interview.role}</h4>
-                          <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                            interview.difficulty === 'beginner' ? 'bg-green-100 text-green-800' :
-                            interview.difficulty === 'intermediate' ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-red-100 text-red-800'
-                          }`}>
-                            {difficultyLabels[interview.difficulty] || interview.difficulty}
-                          </span>
-                        </div>
-                        <p className="text-sm text-gray-600 mb-3">
-                          📅 {new Date(interview.createdAt).toLocaleDateString()} at{' '}
-                          {new Date(interview.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          {` • Set ${interview.setIndex || 1}/${interview.setCount || 3}`}
-                        </p>
-                        <div className="flex gap-6 text-sm">
-                          <span className="text-gray-600">
-                            <span className="font-medium">📝 {interview.totalQuestions}</span> questions
-                          </span>
-                          <span className="text-gray-600">
-                            <span className="font-medium">✅ {interview.answeredQuestions}</span> answered
-                          </span>
-                        </div>
-                      </div>
-                      <div className={`text-right ${getScoreBg(interview.averageScore)} px-6 py-4 rounded-lg`}>
-                        <p className="text-sm text-gray-600 mb-1">Score</p>
-                        <p className={`text-3xl font-bold ${getScoreColor(interview.averageScore)}`}>
-                          {interview.averageScore}%
-                        </p>
-                      </div>
+              ) : filtered.map(iv => (
+                <div key={iv.id} className="flex items-center justify-between px-5 py-4 rounded-2xl hover:-translate-y-0.5 transition-all duration-200" style={S}>
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="font-semibold text-white">{iv.role}</h3>
+                      <Badge variant={iv.difficulty==='beginner'?'success':iv.difficulty==='intermediate'?'warning':'danger'}>
+                        {diffLabel[iv.difficulty]||iv.difficulty}
+                      </Badge>
                     </div>
-
-                    {/* Performance Tier */}
-                    <div className="mt-4 pt-4 border-t border-gray-200">
-                      <span className="text-xs font-medium text-gray-600">
-                        {interview.averageScore >= 80 && '⭐ Excellent'}
-                        {interview.averageScore >= 60 && interview.averageScore < 80 && '👍 Good'}
-                        {interview.averageScore >= 40 && interview.averageScore < 60 && '⚠️ Fair'}
-                        {interview.averageScore < 40 && '💡 Needs Improvement'}
-                      </span>
-                    </div>
+                    <p className="text-xs" style={{ color:'#6b6b8a' }}>
+                      {new Date(iv.createdAt).toLocaleDateString()} · {iv.totalQuestions} questions · {iv.answeredQuestions} answered · Set {iv.setIndex||1}/{iv.setCount||3}
+                    </p>
                   </div>
-                ))
-              ) : (
-                <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
-                  <p className="text-gray-600">No interviews match your filters</p>
+                  <div className="text-right">
+                    <p className="text-xs mb-1" style={{ color:'#6b6b8a' }}>Score</p>
+                    <Badge variant={scoreBadge(iv.averageScore)} className="text-sm">{iv.averageScore}%</Badge>
+                  </div>
                 </div>
-              )}
+              ))}
             </div>
           </>
         )}
-
-        {/* Back Button */}
-        <button
-          onClick={() => navigate('/dashboard')}
-          className="mt-8 flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium"
-        >
-          ← Back to Dashboard
-        </button>
       </div>
     </div>
   );
