@@ -37,7 +37,7 @@ const Dashboard = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const fetch = async () => {
+    const loadDashboard = async () => {
       try {
         const profileRes = await authAPI.getProfile();
         setUser(profileRes.data.user);
@@ -53,7 +53,7 @@ const Dashboard = () => {
         setLoading(false);
       }
     };
-    fetch();
+    loadDashboard();
   }, []);
 
   const handleLogout = () => {
